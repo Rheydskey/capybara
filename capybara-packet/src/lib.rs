@@ -1,11 +1,11 @@
 pub mod helper;
 pub mod types;
 
-use bytes::{BufMut, Bytes, BytesMut};
-use capybara_macros::packet as packet_derive;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use capybara_macros::packet;
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, RsaPublicKey};
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, io::Cursor, sync::Arc};
 use thiserror::Error;
 use types::RawPacket;
 
@@ -115,11 +115,11 @@ pub struct Handshake {
 
 impl PacketTrait for Handshake {
     fn from_bytes(bytes: &Bytes) -> Result<Self, PacketError> {
-        let mut bytes = bytes.iter();
-        let protocol = VarInt::new().read_from_iter(&mut bytes).unwrap();
-        let address = PacketString::from_iterator(&mut bytes).unwrap().to_string();
-        let port = ((u16::from(*bytes.next().unwrap())) << 8) | u16::from(*bytes.next().unwrap());
-        let next_state = *bytes.next().unwrap();
+        let mut bytes = Cursor::new(&bytes[..]);
+        let protocol = VarInt::new().read_from_cursor(&mut bytes).unwrap();
+        let address = PacketString::from_cursor(&mut bytes).unwrap().to_string();
+        let port = ((u16::from(bytes.get_u8())) << 8) | u16::from(bytes.get_u8());
+        let next_state = bytes.get_u8();
 
         Ok(Self {
             protocol,
@@ -138,11 +138,11 @@ pub struct Login {
 
 impl PacketTrait for Login {
     fn from_bytes(bytes: &Bytes) -> Result<Self, PacketError> {
-        let mut bytes = bytes.iter();
-        let name = PacketString::from_iterator(&mut bytes).unwrap().to_string();
+        let mut bytes = Cursor::new(&bytes[..]);
+        let name = PacketString::from_cursor(&mut bytes).unwrap().to_string();
 
-        let has_uuid = *PacketBool::from_iterator(&mut bytes).unwrap();
-        let uuid = PacketUUID::from_iterator(&mut bytes).to_uuid();
+        let has_uuid = *PacketBool::from_cursor(&mut bytes).unwrap();
+        let uuid = PacketUUID::from_cursor(&mut bytes).to_uuid();
 
         Ok(Self {
             name,
@@ -161,6 +161,7 @@ pub struct EncryptionRequest {
 }
 
 impl EncryptionRequest {
+    #[must_use]
     pub fn new(rsa: &RsaPublicKey) -> Self {
         let key = rsa.to_public_key_der().unwrap().to_vec();
         let mut rng = thread_rng();
@@ -196,10 +197,20 @@ impl IntoResponse for EncryptionRequest {
     }
 }
 
-#[derive(packet_derive, Debug, Clone)]
+#[derive(packet, Debug, Clone)]
 pub struct EncryptionResponse {
     #[arraybytes]
     sharedsecret: PacketBytes,
     #[arraybytes]
     verify_token: PacketBytes,
+}
+
+impl EncryptionResponse {
+    pub fn get_shared_key_lenght(&self) -> usize {
+        self.sharedsecret.0.len()
+    }
+
+    pub fn get_verify_token_lenght(&self) -> usize {
+        self.verify_token.0.len()
+    }
 }

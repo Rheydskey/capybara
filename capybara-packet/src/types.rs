@@ -117,7 +117,8 @@ macro_rules! create_var_num {
                 None
             }
             pub fn read_from_cursor(&mut self, cursor: &mut std::io::Cursor<&[u8]>) -> Option<$t> {
-                while let byte = cursor.get_u8() {
+                loop {
+                    let byte = cursor.get_u8();
                     self.result |= ((byte.clone() as $t & Self::SEGMENT_BITS) << self.position);
 
                     self.position += 7;
@@ -130,14 +131,15 @@ macro_rules! create_var_num {
                         return Some(self.result);
                     }
                 }
-                None
             }
 
             pub fn read_from_cursor_bytes(
                 &mut self,
                 cursor: &mut std::io::Cursor<&Bytes>,
             ) -> Option<$t> {
-                while let byte = cursor.get_u8() {
+                loop {
+                    let byte = cursor.get_u8();
+
                     self.result |= ((byte.clone() as $t & Self::SEGMENT_BITS) << self.position);
 
                     self.position += 7;
@@ -150,7 +152,6 @@ macro_rules! create_var_num {
                         return Some(self.result);
                     }
                 }
-                None
             }
             pub fn encode(mut value: $t) -> Vec<u8> {
                 let mut buf: Vec<u8> = Vec::new();

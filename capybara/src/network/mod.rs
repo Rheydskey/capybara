@@ -77,8 +77,6 @@ impl ClientConnection {
 
     pub async fn handle(&mut self) {
         while let Ok(Some(frame)) = self.read_frame().await {
-            info!("{frame:?}");
-
             handler(&self.gstate.clone(), &frame, &mut self.stream).await;
             self.send(frame);
 
@@ -103,6 +101,7 @@ pub async fn handler(state: &Arc<State>, packet: &Packet, stream: &mut TcpStream
             stream.write_all_buf(&mut packet.data).await;
         }
         PacketEnum::UnknowPacket(_) => todo!(),
+        PacketEnum::EncryptionResponse(_) => {}
         _ => todo!(),
     }
 }

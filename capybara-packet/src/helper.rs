@@ -1,6 +1,6 @@
 use crate::{EncryptionResponse, Handshake, Login, PacketError, PacketTrait};
-use bytes::{BufMut, Bytes, BytesMut};
-use std::ops::Deref;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::{io::Cursor, ops::Deref};
 use uuid::Uuid;
 
 use crate::types::VarInt;
@@ -25,6 +25,10 @@ pub fn parse_packet(
 
             Err(PacketError::CannotParse(-1))
         }
+
+        0x1 => Ok(PacketEnum::EncryptionResponse(
+            EncryptionResponse::from_bytes(bytes).unwrap(),
+        )),
 
         _ => Err(PacketError::CannotParse(packetid)),
     }
@@ -52,15 +56,15 @@ pub enum PacketState {
 pub struct PacketUUID(u128);
 
 impl PacketUUID {
-    pub fn from_iterator<'a, T>(bytes: &mut T) -> Self
-    where
-        T: Iterator<Item = &'a u8>,
-    {
-        let bytes = bytes.take(16).copied().collect::<Vec<u8>>();
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Self {
+        let uuid_bytes = Bytes::copy_from_slice(&bytes.chunk()[..16]);
+
+        bytes.advance(16);
+
         let mut uuid: u128 = 0;
 
-        for (n, byte) in bytes.iter().enumerate() {
-            uuid |= u128::from(*byte) << (120 - (8 * n));
+        for (n, byte) in uuid_bytes.into_iter().enumerate() {
+            uuid |= u128::from(byte) << (120 - (8 * n));
         }
 
         Self(uuid)
@@ -81,15 +85,12 @@ impl PacketString {
         Self { size, inner }
     }
 
-    pub fn from_iterator<'a, T>(bytes: &mut T) -> Option<Self>
-    where
-        T: Iterator<Item = &'a u8>,
-    {
-        let string_size = VarInt::new().read_from_iter(bytes)?;
-        let bytes_string = bytes
-            .take(string_size.unsigned_abs() as usize)
-            .copied()
-            .collect::<Vec<u8>>();
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
+        let string_size = VarInt::new().read_from_cursor(bytes)?;
+
+        let bytes_string = bytes.chunk()[..string_size.unsigned_abs() as usize].to_vec();
+
+        bytes.advance(string_size.unsigned_abs() as usize);
 
         let string = String::from_utf8(bytes_string).unwrap();
 
@@ -115,13 +116,10 @@ impl ToString for PacketString {
 pub struct PacketBool(bool);
 
 impl PacketBool {
-    pub fn from_iterator<'a, T>(bytes: &mut T) -> Option<Self>
-    where
-        T: Iterator<Item = &'a u8>,
-    {
-        let boolean = bytes.next()?;
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
+        let boolean = bytes.get_u8();
 
-        Some(Self(*boolean == 0x01))
+        Some(Self(boolean == 0x01))
     }
 }
 
@@ -137,17 +135,13 @@ impl Deref for PacketBool {
 pub struct PacketBytes(pub Vec<u8>);
 
 impl PacketBytes {
-    pub fn from_iterator<'a, T>(bytes: &mut T) -> Option<Self>
-    where
-        T: Iterator<Item = &'a u8>,
-    {
-        let lenght = VarInt::new().read_from_iter(bytes)?;
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
+        let lenght = VarInt::new().read_from_cursor(bytes)?;
+        let usize_lenght = usize::try_from(lenght).unwrap();
+        let arraybytes = bytes.chunk()[..usize_lenght].to_vec();
 
-        Some(Self(
-            bytes
-                .take(usize::try_from(lenght).unwrap())
-                .copied()
-                .collect(),
-        ))
+        bytes.advance(usize_lenght);
+
+        Some(Self(arraybytes))
     }
 }
