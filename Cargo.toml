@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+  'capybara',
+  'capybara-macros',
+  'capybara-packet',
+]
