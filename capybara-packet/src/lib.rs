@@ -1,11 +1,12 @@
 pub mod helper;
 pub mod types;
 
+use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use capybara_macros::packet;
 use rand::{thread_rng, Rng};
-use rsa::{pkcs8::EncodePublicKey, RsaPublicKey};
-use std::{fmt::Debug, io::Cursor, sync::Arc};
+use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
+use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
 use types::RawPacket;
 
@@ -53,12 +54,14 @@ impl Packet {
         self.packetdata = packet;
     }
 
-    pub fn write(&mut self, packetenum: PacketEnum) -> Vec<u8> {
+    /// # Errors
+    /// Return error if cannot encode varint
+    pub fn write(&mut self, packetenum: PacketEnum) -> anyhow::Result<Vec<u8>> {
         let mut buf = Vec::new();
 
         buf.append(&mut VarInt::encode(self.packetid));
         match packetenum {
-            PacketEnum::None => {}
+            PacketEnum::None => Ok(()),
             PacketEnum::HandShake(Handshake {
                 protocol,
                 address,
@@ -69,21 +72,25 @@ impl Packet {
                 buf.append(&mut address.as_bytes().to_vec());
                 buf.append(&mut port.to_be_bytes().to_vec());
                 buf.push(next_state);
+
+                Ok(())
             }
             PacketEnum::Login(Login {
                 name,
                 has_uuid,
                 uuid,
             }) => {
-                buf.append(&mut VarInt::encode(i32::try_from(name.len()).unwrap()));
+                buf.append(&mut VarInt::encode(i32::try_from(name.len())?));
                 buf.append(&mut name.as_bytes().to_vec());
                 buf.push(u8::from(has_uuid));
                 buf.append(&mut uuid.to_u128_le().swap_bytes().to_be_bytes().to_vec());
-            }
-            _ => todo!(),
-        }
 
-        buf
+                Ok(())
+            }
+            _ => Err(anyhow!("Cannot write")),
+        }?;
+
+        Ok(buf)
     }
 }
 
@@ -100,100 +107,59 @@ pub trait IntoResponse {
 }
 
 pub trait PacketTrait {
+    /// # Errors
+    /// Return if error if cannot parse packet
     fn from_bytes(bytes: &Bytes) -> Result<Self, PacketError>
     where
         Self: Sized;
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, packet)]
 pub struct Handshake {
+    #[varint]
     pub protocol: i32,
+    #[string]
     pub address: String,
+    #[u16]
     pub port: u16,
+    #[u8]
     pub next_state: u8,
 }
 
-impl PacketTrait for Handshake {
-    fn from_bytes(bytes: &Bytes) -> Result<Self, PacketError> {
-        let mut bytes = Cursor::new(&bytes[..]);
-        let protocol = VarInt::new().read_from_cursor(&mut bytes).unwrap();
-        let address = PacketString::from_cursor(&mut bytes).unwrap().to_string();
-        let port = ((u16::from(bytes.get_u8())) << 8) | u16::from(bytes.get_u8());
-        let next_state = bytes.get_u8();
-
-        Ok(Self {
-            protocol,
-            address,
-            port,
-            next_state,
-        })
-    }
-}
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, packet)]
 pub struct Login {
+    #[string]
     pub name: String,
+    #[bool]
     pub has_uuid: bool,
+    #[uuid]
     pub uuid: uuid::Uuid,
 }
 
-impl PacketTrait for Login {
-    fn from_bytes(bytes: &Bytes) -> Result<Self, PacketError> {
-        let mut bytes = Cursor::new(&bytes[..]);
-        let name = PacketString::from_cursor(&mut bytes).unwrap().to_string();
-
-        let has_uuid = *PacketBool::from_cursor(&mut bytes).unwrap();
-        let uuid = PacketUUID::from_cursor(&mut bytes).to_uuid();
-
-        Ok(Self {
-            name,
-            has_uuid,
-            uuid,
-        })
-    }
-}
-
+#[derive(Debug, Clone, packet)]
 pub struct EncryptionRequest {
+    #[string]
     pub server_id: String,
-    pub publickey_len: usize,
-    pub publickey: Vec<u8>,
-    pub verify_token_lenght: usize,
-    pub verify_token: Vec<u8>,
+    #[arraybytes]
+    pub publickey: PacketBytes,
+    #[arraybytes]
+    pub verify_token: PacketBytes,
 }
 
 impl EncryptionRequest {
-    #[must_use]
-    pub fn new(rsa: &RsaPublicKey) -> Self {
-        let key = rsa.to_public_key_der().unwrap().to_vec();
+    /// # Errors
+    /// Return error if cannot convert public key to DER format
+    pub fn new(rsa: &RsaPublicKey) -> Result<Self, rsa::pkcs8::Error> {
+        let key = rsa.to_public_key_der()?.to_vec();
         let mut rng = thread_rng();
         let mut token = [0; 4];
         rng.fill(&mut token[..]);
-        Self {
+        println!("{token:?}");
+        Ok(Self {
             server_id: String::new(),
-            publickey_len: key.len(),
-            publickey: key,
-            verify_token: token.to_vec(),
-            verify_token_lenght: token.len(),
-        }
-    }
-}
-
-impl IntoResponse for EncryptionRequest {
-    fn to_response(self, state: &Arc<State>, packet: &Packet) -> Bytes {
-        let mut bytes = BytesMut::new();
-
-        bytes.put(PacketString::to_bytes(self.server_id));
-
-        bytes.put_slice(&VarInt::encode(i32::try_from(self.publickey_len).unwrap()));
-
-        bytes.put_slice(&self.publickey);
-
-        bytes.put_slice(&VarInt::encode(
-            i32::try_from(self.verify_token_lenght).unwrap(),
-        ));
-
-        bytes.put_slice(&self.verify_token);
-
-        bytes.freeze()
+            publickey: PacketBytes(key),
+            verify_token: PacketBytes(token.to_vec()),
+        })
     }
 }
 
@@ -206,10 +172,23 @@ pub struct EncryptionResponse {
 }
 
 impl EncryptionResponse {
-    pub fn get_shared_key_lenght(&self) -> usize {
+    /// # Errors
+    /// Return errors if cannot decrypt from Rsa key
+    pub fn decrypt(&self, rsa: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
+        rsa.decrypt(Pkcs1v15Encrypt, self.get_shared_secret())
+    }
+
+    #[must_use]
+    pub const fn get_shared_secret(&self) -> &Vec<u8> {
+        &self.sharedsecret.0
+    }
+
+    #[must_use]
+    pub fn get_shared_secret_lenght(&self) -> usize {
         self.sharedsecret.0.len()
     }
 
+    #[must_use]
     pub fn get_verify_token_lenght(&self) -> usize {
         self.verify_token.0.len()
     }

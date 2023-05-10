@@ -1,5 +1,5 @@
 #[derive(Debug, Clone)]
-pub enum FieldType {
+pub enum FType {
     NonGeneric(String),
     Generic(String, Vec<String>),
 }
@@ -7,6 +7,6 @@ pub enum FieldType {
 #[derive(Debug, Clone)]
 pub struct Field {
     pub ident: String,
-    pub field_type: FieldType,
+    pub field_type: FType,
     pub attribute_type: String,
 }

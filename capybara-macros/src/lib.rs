@@ -8,10 +8,11 @@ use syn::{
 };
 extern crate proc_macro;
 use quote::{quote, ToTokens, TokenStreamExt};
+use typeshelper::{StringHelper, U16helper, U8helper, UuidHelper, VarLong};
 
 use crate::{
-    field::FieldType,
-    typeshelper::{ArrayBytes, VarInt},
+    field::FType,
+    typeshelper::{ArrayBytes, BoolHelper, VarInt},
 };
 
 mod typeshelper;
@@ -23,24 +24,40 @@ struct IntoResponse(Field);
 impl ToTokens for IntoResponse {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self.0.attribute_type.as_str() {
-            "varint" => Self::put_bytes_ts(tokens, VarInt::encode(&self.0)),
+            "varint" => Self::put_bytes_ts(tokens, &VarInt::encode(&self.0)),
             "arraybytes" => {
                 let (lenght, val) = ArrayBytes::encode(&self.0);
 
-                Self::put_bytes_ts(tokens, lenght);
+                Self::put_bytes_ts(tokens, &lenght);
 
-                Self::put_bytes_ts(tokens, val);
+                Self::put_bytes_ts(tokens, &val);
             }
+            "varlong" => Self::put_bytes_ts(tokens, &VarLong::encode(&self.0)),
+            "string" => Self::put_bytes_ts(tokens, &StringHelper::encode(&self.0)),
+            "u8" => Self::put_u8_ts(tokens, &U8helper::encode(&self.0)),
+            "u16" => Self::put_bytes_ts(tokens, &U16helper::encode(&self.0)),
+            "bool" => Self::put_u8_ts(tokens, &BoolHelper::encode(&self.0)),
+            "uuid" => Self::put_u128_ts(tokens, &UuidHelper::encode(&self.0)),
             _ => unimplemented!(),
         };
-
-        println!("{tokens}");
     }
 }
 
 impl IntoResponse {
-    pub fn put_bytes_ts(tokens: &mut proc_macro2::TokenStream, group: proc_macro2::Group) {
+    pub fn put_bytes_ts(tokens: &mut proc_macro2::TokenStream, group: &proc_macro2::Group) {
         let put_slice = Group::new(Delimiter::None, quote!(bytes.put_slice(&#group);));
+
+        tokens.append(put_slice);
+    }
+
+    pub fn put_u8_ts(tokens: &mut proc_macro2::TokenStream, group: &proc_macro2::Group) {
+        let put_slice = Group::new(Delimiter::None, quote!(bytes.put_u8(#group);));
+
+        tokens.append(put_slice);
+    }
+
+    pub fn put_u128_ts(tokens: &mut proc_macro2::TokenStream, group: &proc_macro2::Group) {
+        let put_slice = Group::new(Delimiter::None, quote!(bytes.put_u128(#group);));
 
         tokens.append(put_slice);
     }
@@ -74,6 +91,12 @@ impl FromBytes {
         let group = match self.0.attribute_type.as_str() {
             "arraybytes" => ArrayBytes::decode(),
             "varint" => VarInt::decode(),
+            "varlong" => VarLong::decode(),
+            "string" => StringHelper::decode(),
+            "u8" => U8helper::decode(),
+            "u16" => U16helper::decode(),
+            "bool" => BoolHelper::decode(),
+            "uuid" => UuidHelper::decode(),
             _ => unimplemented!("{}", self.0.attribute_type.as_str()),
         };
 
@@ -85,11 +108,13 @@ impl FromBytes {
 
 /// # Panics
 /// Panic when invalid data
-#[proc_macro_derive(packet, attributes(varint, varlong, arraybytes))]
+#[proc_macro_derive(
+    packet,
+    attributes(varint, varlong, arraybytes, string, u8, u16, bool, uuid)
+)]
 pub fn derive_packet(item: TokenStream) -> TokenStream {
     let DeriveInput { ident, data, .. } = parse_macro_input!(item);
 
-    println!("{ident}");
     let gentype_contains_type = |barket: &AngleBracketedGenericArguments| -> bool {
         for i in &barket.args {
             if let GenericArgument::Type(_) = i {
@@ -119,7 +144,7 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
     };
 
     let syn::Data::Struct(ds) = data else {
-      unimplemented!()
+      unimplemented!("Derive macro work only on struct")
     };
 
     let methods: Vec<Field> = ds
@@ -133,16 +158,16 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
 
             let fieldtype;
             if let Some(ident) = typath.path.get_ident() {
-                fieldtype = FieldType::NonGeneric(ident.to_string());
+                fieldtype = FType::NonGeneric(ident.to_string());
             } else if let Some(segment) = typath.path.segments.last() {
                 let toptype = segment.ident.to_string();
                 fieldtype = match &segment.arguments {
-                    PathArguments::None => FieldType::NonGeneric(toptype),
+                    PathArguments::None => FType::NonGeneric(toptype),
                     PathArguments::AngleBracketed(gentype) => {
                         if gentype_contains_type(gentype) {
-                            FieldType::Generic(toptype, gentype_to_vec(gentype))
+                            FType::Generic(toptype, gentype_to_vec(gentype))
                         } else {
-                            FieldType::NonGeneric(toptype)
+                            FType::NonGeneric(toptype)
                         }
                     }
                     PathArguments::Parenthesized(_) => {

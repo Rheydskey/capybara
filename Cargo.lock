@@ -104,6 +104,7 @@ dependencies = [
 name = "capybara-packet"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bytes",
  "capybara-macros",
  "log",

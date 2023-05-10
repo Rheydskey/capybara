@@ -54,7 +54,7 @@ fn colored_level(style: &mut Style, level: Level) -> StyledValue<'_, &'static st
 async fn main() {
     init_log();
     let state = Arc::new(State::new());
-    info!("{state:?}");
+
     let socket = TcpListener::bind("127.0.0.1:25565").await.unwrap();
     loop {
         match socket.accept().await {

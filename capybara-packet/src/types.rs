@@ -79,26 +79,6 @@ macro_rules! create_var_num {
                 }
             }
 
-            pub fn read_from_iter<'a, T>(&mut self, iter: &mut T) -> Option<$t>
-            where
-                T: Iterator<Item = &'a u8>,
-            {
-                while let Some(byte) = iter.next() {
-                    self.result |= ((byte.clone() as $t & Self::SEGMENT_BITS) << self.position);
-
-                    self.position += 7;
-
-                    if self.position >= $max_pos {
-                        panic!("Too long")
-                    }
-
-                    if (byte.clone() as $t & Self::CONTINUE_BIT) == 0 {
-                        return Some(self.result);
-                    }
-                }
-
-                None
-            }
             pub fn read_from_bytes(&mut self, bytes: &Bytes) -> Option<$t> {
                 while let Some(byte) = bytes.iter().next() {
                     self.result |= ((byte.clone() as $t & Self::SEGMENT_BITS) << self.position);
@@ -153,6 +133,7 @@ macro_rules! create_var_num {
                     }
                 }
             }
+
             pub fn encode(mut value: $t) -> Vec<u8> {
                 let mut buf: Vec<u8> = Vec::new();
                 loop {

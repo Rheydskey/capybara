@@ -91,17 +91,29 @@ impl ClientConnection {
     }
 }
 
-pub async fn handler(state: &Arc<State>, packet: &Packet, stream: &mut TcpStream) {
-    match packet.packetdata {
+pub async fn handler(
+    state: &Arc<State>,
+    packet: &Packet,
+    stream: &mut TcpStream,
+) -> anyhow::Result<()> {
+    match &packet.packetdata {
         PacketEnum::None => todo!(),
-        PacketEnum::HandShake(_) => {}
+        PacketEnum::HandShake(_) => Ok(()),
         PacketEnum::Login(_) => {
-            let a = EncryptionRequest::new(&state.rsa.to_public_key()).to_response(state, packet);
+            let a = EncryptionRequest::new(&state.rsa.to_public_key())?.to_response(state, packet);
             let mut packet = RawPacket::from_bytes(&a, 0x01);
             stream.write_all_buf(&mut packet.data).await;
+
+            Ok(())
         }
         PacketEnum::UnknowPacket(_) => todo!(),
-        PacketEnum::EncryptionResponse(_) => {}
+        PacketEnum::EncryptionResponse(packet) => {
+            let shared = packet.decrypt(&state.rsa)?.clone();
+
+            println!("{:?}", Bytes::copy_from_slice(&shared));
+
+            Ok(())
+        }
         _ => todo!(),
     }
 }
