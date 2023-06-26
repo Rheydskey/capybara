@@ -5,14 +5,19 @@ use uuid::Uuid;
 
 use crate::types::VarInt;
 
-pub fn parse_packet(packetid: i32, bytes: &Bytes) -> Result<PacketEnum, PacketError> {
+pub fn parse_packet(
+    packetid: i32,
+    state: &PacketState,
+    bytes: &Bytes,
+) -> Result<PacketEnum, PacketError> {
     match packetid {
         0x0 => {
-            if let Ok(handshake) = Handshake::from_bytes(bytes) {
-                return Ok(PacketEnum::HandShake(handshake));
+            if matches!(state, PacketState::None) {
+                return Ok(PacketEnum::HandShake(Handshake::from_bytes(bytes)?));
             }
-            if let Ok(login) = Login::from_bytes(bytes) {
-                return Ok(PacketEnum::Login(login));
+
+            if matches!(state, PacketState::Login) {
+                return Ok(PacketEnum::Login(Login::from_bytes(bytes)?));
             }
 
             Err(PacketError::CannotParse(-1))
@@ -79,8 +84,10 @@ impl PacketString {
 
     pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
         let string_size = VarInt::new().read_from_cursor(bytes)?;
-
-        let bytes_string = bytes.chunk()[..string_size.unsigned_abs() as usize].to_vec();
+        let bytes_string = bytes
+            .chunk()
+            .get(..string_size.unsigned_abs() as usize)?
+            .to_vec();
 
         bytes.advance(string_size.unsigned_abs() as usize);
 

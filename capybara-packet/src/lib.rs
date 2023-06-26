@@ -35,8 +35,8 @@ impl Packet {
         }
     }
 
-    pub fn parse_from_rawpacket(&mut self, rawpacket: &RawPacket) {
-        let packet = parse_packet(rawpacket.packetid, &rawpacket.data).unwrap();
+    pub fn parse_from_rawpacket(&mut self, state: &PacketState, rawpacket: &RawPacket) {
+        let packet = parse_packet(rawpacket.packetid, state, &rawpacket.data).unwrap();
 
         info!("{packet:?}");
 

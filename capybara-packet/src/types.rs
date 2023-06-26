@@ -19,10 +19,10 @@ impl RawPacket {
         let mut cursor = Cursor::new(bytes);
         let mut lenght = VarInt::new();
         let lenght = lenght.read_from_cursor_bytes(&mut cursor).unwrap();
-
+        info!("{lenght}");
         let mut packetid = VarInt::new();
         let packetid = packetid.read_from_cursor_bytes(&mut cursor).unwrap();
-
+        info!("{packetid}");
         Self {
             lenght,
             packetid,

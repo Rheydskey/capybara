@@ -29,9 +29,11 @@ impl Player {
     }
 
     pub async fn handle(mut self, rsa: &RsaPrivateKey) -> anyhow::Result<()> {
-        while let Ok(Some(packet)) = self.connection.read().await {
+        while let Ok(Some(packet)) = self.connection.read(&self.state).await {
             match &packet.packetdata {
-                PacketEnum::HandShake(_) => {}
+                PacketEnum::HandShake(_) => {
+                    self.state = PacketState::Login;
+                }
                 PacketEnum::Login(_) => {
                     let a = EncryptionRequest::new(&rsa.to_public_key())?.to_response(&packet);
                     let mut packet = RawPacket::from_bytes(&a, 0x01);

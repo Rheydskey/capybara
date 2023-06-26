@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use bytes::{Bytes, BytesMut};
-use capybara_packet::types::RawPacket;
 use capybara_packet::Packet;
+use capybara_packet::{helper::PacketState, types::RawPacket};
 use tokio::{io::AsyncReadExt, net::TcpStream};
 
 #[derive(Debug)]
@@ -20,13 +20,11 @@ impl ClientConnection {
         }
     }
 
-    pub async fn read(&mut self) -> Result<Option<Packet>> {
+    pub async fn read(&mut self, state: &PacketState) -> Result<Option<Packet>> {
+        self.buffer = BytesMut::with_capacity(4096);
         loop {
-            info!("{:?}", self.buffer);
-            if let Some(frame) = self.parse_frame()? {
-                let result = Ok(Some(frame.clone()));
-                self.buffer = BytesMut::with_capacity(4096);
-                return result;
+            if let Some(frame) = self.parse_frame(state)? {
+                return Ok(Some(frame.clone()));
             }
 
             if self.stream.read_buf(&mut self.buffer).await? == 0 {
@@ -39,7 +37,7 @@ impl ClientConnection {
         }
     }
 
-    pub fn parse_frame(&mut self) -> Result<Option<Packet>> {
+    pub fn parse_frame(&mut self, state: &PacketState) -> Result<Option<Packet>> {
         if self.buffer.is_empty() {
             return Ok(None);
         }
@@ -52,7 +50,7 @@ impl ClientConnection {
 
         let mut packet = Packet::new();
 
-        packet.parse_from_rawpacket(&rawpacket);
+        packet.parse_from_rawpacket(state, &rawpacket);
 
         Ok(Some(packet))
     }
