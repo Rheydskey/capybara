@@ -1,10 +1,10 @@
 use rsa::RsaPrivateKey;
 
-use crate::network::ClientConnection;
+use crate::{network::ClientConnection, player::Player};
 
 #[derive(Debug)]
 pub struct State {
-    connection: Vec<ClientConnection>,
+    connection: Vec<Player>,
     pub rsa: rsa::RsaPrivateKey,
 }
 

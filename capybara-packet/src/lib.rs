@@ -6,7 +6,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use capybara_macros::packet;
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, str::FromStr, sync::Arc};
 use thiserror::Error;
 use types::RawPacket;
 
@@ -18,11 +18,10 @@ use crate::types::VarInt;
 #[macro_use]
 extern crate log;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Packet {
     pub lenght: i32,
     pub packetid: i32,
-    pub packetstate: PacketState,
     pub packetdata: PacketEnum,
 }
 
@@ -31,23 +30,13 @@ impl Packet {
         Self {
             lenght: 0,
             packetid: 0,
-            packetstate: PacketState::None,
-            packetdata: PacketEnum::None,
-        }
-    }
 
-    pub const fn new_from_state(state: PacketState) -> Self {
-        Self {
-            lenght: 0,
-            packetid: 0,
-            packetstate: state,
             packetdata: PacketEnum::None,
         }
     }
 
     pub fn parse_from_rawpacket(&mut self, rawpacket: &RawPacket) {
-        let packet =
-            parse_packet(rawpacket.packetid, &rawpacket.data, &mut self.packetstate).unwrap();
+        let packet = parse_packet(rawpacket.packetid, &rawpacket.data).unwrap();
 
         info!("{packet:?}");
 
@@ -103,7 +92,7 @@ pub enum PacketError {
 }
 
 pub trait IntoResponse {
-    fn to_response(self, state: &Arc<State>, packet: &Packet) -> Bytes;
+    fn to_response(self, packet: &Packet) -> Bytes;
 }
 
 pub trait PacketTrait {
@@ -154,7 +143,7 @@ impl EncryptionRequest {
         let mut rng = thread_rng();
         let mut token = [0; 4];
         rng.fill(&mut token[..]);
-        println!("{token:?}");
+        info!("token: {token:?}");
         Ok(Self {
             server_id: String::new(),
             publickey: PacketBytes(key),
@@ -172,9 +161,13 @@ pub struct EncryptionResponse {
 }
 
 impl EncryptionResponse {
+    pub fn decrypt_verify_token(&self, rsa: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
+        rsa.decrypt(Pkcs1v15Encrypt, &self.verify_token.0)
+    }
+
     /// # Errors
     /// Return errors if cannot decrypt from Rsa key
-    pub fn decrypt(&self, rsa: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
+    pub fn decrypt_shared_secret(&self, rsa: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
         rsa.decrypt(Pkcs1v15Encrypt, self.get_shared_secret())
     }
 
@@ -191,5 +184,25 @@ impl EncryptionResponse {
     #[must_use]
     pub fn get_verify_token_lenght(&self) -> usize {
         self.verify_token.0.len()
+    }
+}
+
+#[derive(packet)]
+pub struct LoginSuccessPacket {
+    #[uuid]
+    uuid: uuid::Uuid,
+    #[string]
+    username: String,
+    #[varint]
+    length_properties: i32,
+}
+
+impl LoginSuccessPacket {
+    pub fn new(username: String) -> Self {
+        Self {
+            uuid: uuid::Uuid::from_str("fb488a18-6b02-4b62-9c8f-4eb27e265851").unwrap(),
+            username,
+            length_properties: 0,
+        }
     }
 }

@@ -15,9 +15,8 @@ use crate::{
     typeshelper::{ArrayBytes, BoolHelper, VarInt},
 };
 
-mod typeshelper;
-
 mod field;
+mod typeshelper;
 
 struct IntoResponse(Field);
 
@@ -195,8 +194,8 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
     let output = quote! {
         #[automatically_derived]
         impl IntoResponse for #ident {
-            fn to_response(self, state: &Arc<State>, packet: &Packet) -> Bytes {
-                let mut bytes = BytesMut::new();
+            fn to_response(self, packet: &Packet) -> Bytes {
+                let mut bytes = ::bytes::BytesMut::new();
                 #(#to_res;)*
 
                 bytes.freeze()

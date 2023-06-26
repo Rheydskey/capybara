@@ -1,9 +1,10 @@
+use bytes::Bytes;
 use capybara_packet::types::{VarInt, VarLong};
 
 #[test]
 pub fn test_varint() {
     let test_var = |data: &[u8], result: i32| {
-        let val = VarInt::new().read_from_iter(&mut data.iter());
+        let val = VarInt::new().read_from_bytes(&Bytes::copy_from_slice(data));
         assert_eq!(val, Some(result));
     };
 
@@ -14,7 +15,7 @@ pub fn test_varint() {
 #[test]
 pub fn test_varfloat() {
     let test_var = |data: &[u8], result: i64| {
-        let val = VarLong::new().read_from_iter(&mut data.iter());
+        let val = VarLong::new().read_from_bytes(&Bytes::copy_from_slice(data));
         assert_eq!(val, Some(result));
     };
 

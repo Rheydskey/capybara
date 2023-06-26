@@ -5,22 +5,14 @@ use uuid::Uuid;
 
 use crate::types::VarInt;
 
-pub fn parse_packet(
-    packetid: i32,
-    bytes: &Bytes,
-    state: &mut PacketState,
-) -> Result<PacketEnum, PacketError> {
+pub fn parse_packet(packetid: i32, bytes: &Bytes) -> Result<PacketEnum, PacketError> {
     match packetid {
         0x0 => {
-            if matches!(state, PacketState::None) {
-                let handshake = Handshake::from_bytes(bytes)?;
-                *state = PacketState::Handshake;
+            if let Ok(handshake) = Handshake::from_bytes(bytes) {
                 return Ok(PacketEnum::HandShake(handshake));
             }
-
-            if matches!(state, PacketState::Handshake) {
-                let handshake = Login::from_bytes(bytes)?;
-                return Ok(PacketEnum::Login(handshake));
+            if let Ok(login) = Login::from_bytes(bytes) {
+                return Ok(PacketEnum::Login(login));
             }
 
             Err(PacketError::CannotParse(-1))
