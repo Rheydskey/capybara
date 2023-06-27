@@ -194,17 +194,17 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
     let output = quote! {
         #[automatically_derived]
         impl IntoResponse for #ident {
-            fn to_response(self, packet: &Packet) -> Bytes {
+            fn to_response(self, packet: &Packet) -> ::anyhow::Result<Bytes> {
                 let mut bytes = ::bytes::BytesMut::new();
                 #(#to_res;)*
 
-                bytes.freeze()
+                Ok(bytes.freeze())
             }
         }
 
         #[automatically_derived]
         impl crate::PacketTrait for #ident {
-            fn from_bytes(bytes: &::bytes::Bytes) -> Result<Self, crate::PacketError> {
+            fn from_bytes(bytes: &::bytes::Bytes) -> ::anyhow::Result<Self> {
                 let mut bytes = ::std::io::Cursor::new(&bytes[..]);
 
                 #from_bytes

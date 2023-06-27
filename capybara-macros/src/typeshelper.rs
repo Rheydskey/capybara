@@ -9,7 +9,7 @@ impl VarInt {
     pub fn decode() -> Group {
         Group::new(
             Delimiter::None,
-            quote!(VarInt::new().read_from_cursor(&mut bytes).unwrap()),
+            quote!(VarInt::new().read_from_cursor(&mut bytes)?),
         )
     }
 
@@ -22,7 +22,7 @@ impl VarInt {
         Group::new(
             Delimiter::None,
             quote!(
-                VarInt::encode(i32::try_from(#group).unwrap())
+                VarInt::encode(i32::try_from(#group)?)
             ),
         )
     }
@@ -34,7 +34,7 @@ impl ArrayBytes {
     pub fn decode() -> Group {
         Group::new(
             Delimiter::None,
-            quote!(PacketBytes::from_cursor(&mut bytes).unwrap()),
+            quote!(PacketBytes::from_cursor(&mut bytes)?),
         )
     }
 
@@ -65,13 +65,16 @@ impl StringHelper {
     pub fn decode() -> Group {
         Group::new(
             Delimiter::None,
-            quote!(PacketString::from_cursor(&mut bytes).unwrap().to_string()),
+            quote!(PacketString::from_cursor(&mut bytes)?.to_string()),
         )
     }
 
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
-        Group::new(Delimiter::None, quote!(PacketString::to_bytes(self.#ident)))
+        Group::new(
+            Delimiter::None,
+            quote!(PacketString::to_bytes(self.#ident.as_str())?),
+        )
     }
 }
 
@@ -81,7 +84,7 @@ impl VarLong {
     pub fn decode() -> Group {
         Group::new(
             Delimiter::None,
-            quote!(VarLong::new().read_from_iter(&mut bytes).unwrap()),
+            quote!(VarLong::new().read_from_iter(&mut bytes)?),
         )
     }
 
@@ -94,7 +97,7 @@ impl VarLong {
         Group::new(
             Delimiter::None,
             quote!(
-                VarLong::encode(i64::try_from(#group).unwrap())
+                VarLong::encode(i64::try_from(#group)?)
             ),
         )
     }
@@ -135,7 +138,7 @@ impl BoolHelper {
     pub fn decode() -> Group {
         Group::new(
             Delimiter::None,
-            quote!(*PacketBool::from_cursor(&mut bytes).unwrap()),
+            quote!(*PacketBool::from_cursor(&mut bytes)),
         )
     }
 

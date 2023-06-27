@@ -1,15 +1,20 @@
 use crate::{EncryptionResponse, Handshake, Login, PacketError, PacketTrait};
+use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{io::Cursor, ops::Deref};
 use uuid::Uuid;
 
 use crate::types::VarInt;
 
+/// Return parsed packet
+///
+/// # Errors
+/// Return error if cannot parse the packet
 pub fn parse_packet(
     packetid: i32,
     state: &PacketState,
     bytes: &Bytes,
-) -> Result<PacketEnum, PacketError> {
+) -> anyhow::Result<PacketEnum> {
     match packetid {
         0x0 => {
             if matches!(state, PacketState::None) {
@@ -20,14 +25,14 @@ pub fn parse_packet(
                 return Ok(PacketEnum::Login(Login::from_bytes(bytes)?));
             }
 
-            Err(PacketError::CannotParse(-1))
+            Err(PacketError::CannotParse(-1).into())
         }
 
         0x1 => Ok(PacketEnum::EncryptionResponse(
-            EncryptionResponse::from_bytes(bytes).unwrap(),
+            EncryptionResponse::from_bytes(bytes)?,
         )),
 
-        _ => Err(PacketError::CannotParse(packetid)),
+        _ => Err(PacketError::CannotParse(packetid).into()),
     }
 }
 
@@ -67,6 +72,7 @@ impl PacketUUID {
         Self(uuid)
     }
 
+    #[must_use]
     pub const fn to_uuid(&self) -> Uuid {
         uuid::Uuid::from_u128(self.0)
     }
@@ -78,31 +84,45 @@ pub struct PacketString {
 }
 
 impl PacketString {
+    #[must_use]
     pub const fn new(size: i32, inner: String) -> Self {
         Self { size, inner }
     }
 
-    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
+    /// Return a `PacketString` from bytes
+    ///
+    /// # Errors
+    /// Return error if cannot:
+    /// - Read lenght of string
+    /// - Get range of bytes
+    /// - Transform bytes to string
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> anyhow::Result<Self> {
         let string_size = VarInt::new().read_from_cursor(bytes)?;
+
         let bytes_string = bytes
             .chunk()
-            .get(..string_size.unsigned_abs() as usize)?
+            .get(..string_size.unsigned_abs() as usize)
+            .ok_or_else(|| anyhow!("Bytes array too small"))?
             .to_vec();
 
         bytes.advance(string_size.unsigned_abs() as usize);
 
-        let string = String::from_utf8(bytes_string).unwrap();
+        let string = String::from_utf8(bytes_string)?;
 
-        Some(Self::new(string_size, string))
+        Ok(Self::new(string_size, string))
     }
 
-    pub fn to_bytes(string: String) -> Bytes {
+    /// Return encoded string for minecraft packet
+    ///
+    /// # Errors
+    /// Return error if cannot transform string lenght in `i32`
+    pub fn to_bytes(string: &str) -> anyhow::Result<Bytes> {
         let mut bytes = BytesMut::new();
 
-        bytes.put_slice(&VarInt::encode(i32::try_from(string.len()).unwrap()));
+        bytes.put_slice(&VarInt::encode(i32::try_from(string.len())?));
         bytes.put_slice(string.as_bytes());
 
-        bytes.freeze()
+        Ok(bytes.freeze())
     }
 }
 
@@ -115,10 +135,10 @@ impl ToString for PacketString {
 pub struct PacketBool(bool);
 
 impl PacketBool {
-    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Self {
         let boolean = bytes.get_u8();
 
-        Some(Self(boolean == 0x01))
+        Self(boolean == 0x01)
     }
 }
 
@@ -134,13 +154,24 @@ impl Deref for PacketBool {
 pub struct PacketBytes(pub Vec<u8>);
 
 impl PacketBytes {
-    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> Option<Self> {
+    /// Return `Vec` of `u8` decoded from minecraft packet
+    ///
+    /// # Errors
+    /// Return error if cannot:
+    /// - Get length of arraybyte
+    /// - Cannot get range of bytes
+    pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> anyhow::Result<Self> {
         let lenght = VarInt::new().read_from_cursor(bytes)?;
-        let usize_lenght = usize::try_from(lenght).unwrap();
-        let arraybytes = bytes.chunk()[..usize_lenght].to_vec();
+
+        let usize_lenght = usize::try_from(lenght)?;
+        let arraybytes = bytes
+            .chunk()
+            .get(..usize_lenght)
+            .ok_or_else(|| anyhow!("Cannot get the range of bytes"))?
+            .to_vec();
 
         bytes.advance(usize_lenght);
 
-        Some(Self(arraybytes))
+        Ok(Self(arraybytes))
     }
 }

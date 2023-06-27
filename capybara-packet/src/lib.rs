@@ -2,15 +2,15 @@ pub mod helper;
 pub mod types;
 
 use anyhow::anyhow;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes};
 use capybara_macros::packet;
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
-use std::{fmt::Debug, str::FromStr, sync::Arc};
+use std::{fmt::Debug, str::FromStr};
 use thiserror::Error;
 use types::RawPacket;
 
-use crate::{helper::parse_packet, types::State};
+use crate::helper::parse_packet;
 use helper::{PacketBool, PacketBytes, PacketEnum, PacketState, PacketString, PacketUUID};
 
 use crate::types::VarInt;
@@ -92,13 +92,13 @@ pub enum PacketError {
 }
 
 pub trait IntoResponse {
-    fn to_response(self, packet: &Packet) -> Bytes;
+    fn to_response(self, packet: &Packet) -> anyhow::Result<Bytes>;
 }
 
 pub trait PacketTrait {
     /// # Errors
     /// Return if error if cannot parse packet
-    fn from_bytes(bytes: &Bytes) -> Result<Self, PacketError>
+    fn from_bytes(bytes: &Bytes) -> anyhow::Result<Self>
     where
         Self: Sized;
 }
