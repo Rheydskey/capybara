@@ -4,5 +4,4 @@ members = [
   'capybara',
   'capybara-macros',
   'capybara-packet',
-  'capybara-ecs'
 ]
