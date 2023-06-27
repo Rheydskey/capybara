@@ -1,11 +1,10 @@
 use bytes::Bytes;
 use capybara_packet::{
     helper::{PacketEnum, PacketState},
-    types::RawPacket,
-    EncryptionRequest, IntoResponse, LoginSuccessPacket,
+    EncryptionRequest, Handshake, IntoResponse, LoginSuccessPacket,
 };
-use rsa::{RsaPrivateKey, RsaPublicKey};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use rsa::RsaPrivateKey;
+use tokio::net::TcpStream;
 use uuid::Uuid;
 
 use crate::network::ClientConnection;
@@ -14,6 +13,7 @@ use crate::network::ClientConnection;
 pub struct Player {
     pub name: Option<String>,
     pub uuid: Option<Uuid>,
+    pub shared_key: Vec<u8>,
     pub state: PacketState,
     connection: ClientConnection,
 }
@@ -23,6 +23,7 @@ impl Player {
         Self {
             name: None,
             uuid: None,
+            shared_key: vec![],
             state: PacketState::None,
             connection: ClientConnection::new(stream),
         }
@@ -31,18 +32,22 @@ impl Player {
     pub async fn handle(mut self, rsa: &RsaPrivateKey) -> anyhow::Result<()> {
         while let Ok(Some(packet)) = self.connection.read(&self.state).await {
             match &packet.packetdata {
-                PacketEnum::HandShake(_) => {
+                PacketEnum::HandShake(Handshake {
+                    protocol,
+                    next_state,
+                    ..
+                }) => {
+                    info!(
+                        "New connection : Protocol : {} and next state is {}",
+                        protocol, next_state
+                    );
                     self.state = PacketState::Login;
                 }
                 PacketEnum::Login(_) => {
-                    let a = EncryptionRequest::new(&rsa.to_public_key())?.to_response(&packet);
-                    let mut packet = RawPacket::from_bytes(&a, 0x01);
-                    self.connection
-                        .stream
-                        .write_all_buf(&mut packet.data)
-                        .await
-                        .unwrap();
+                    let a = EncryptionRequest::new(&rsa.to_public_key())?.to_response(&packet)?;
+                    self.connection.send_packet(&a, 0x01).await?;
                 }
+
                 PacketEnum::EncryptionResponse(encryptionpacket) => {
                     let shared = encryptionpacket.decrypt_shared_secret(&rsa)?.clone();
                     let verify = encryptionpacket.decrypt_verify_token(&rsa)?.clone();
@@ -50,14 +55,12 @@ impl Player {
 
                     info!("{:?}", &verify);
 
+                    self.connection.set_encryption(&shared);
+
                     let response =
-                        LoginSuccessPacket::new("Rheydskey".to_string()).to_response(&packet);
-                    let mut packet = RawPacket::from_bytes(&response, 0x02);
-                    println!("{packet:?}");
-                    self.connection
-                        .stream
-                        .write_all_buf(&mut packet.data)
-                        .await?;
+                        LoginSuccessPacket::new("Rheydskey".to_string()).to_response(&packet)?;
+
+                    self.connection.send_packet(&response, 0x02).await?;
                 }
                 _ => todo!(),
             }
