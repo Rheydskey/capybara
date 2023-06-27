@@ -8,7 +8,7 @@ use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
 use std::{fmt::Debug, str::FromStr};
 use thiserror::Error;
-use types::RawPacket;
+use types::{Chat, RawPacket, Text};
 
 use crate::helper::parse_packet;
 use helper::{PacketBool, PacketBytes, PacketEnum, PacketState, PacketString, PacketUUID};
@@ -204,5 +204,19 @@ impl LoginSuccessPacket {
             username,
             length_properties: 0,
         }
+    }
+}
+
+#[derive(Debug, packet)]
+pub struct DisconnectPacket {
+    #[string]
+    reason: String,
+}
+
+impl DisconnectPacket {
+    pub fn from_reason(reason: &str) -> Self {
+        let reason = Chat::SimpleText(Text::new(reason)).to_string().unwrap();
+
+        Self { reason }
     }
 }

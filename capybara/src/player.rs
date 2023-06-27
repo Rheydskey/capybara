@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use capybara_packet::{
     helper::{PacketEnum, PacketState},
-    EncryptionRequest, Handshake, IntoResponse, LoginSuccessPacket,
+    DisconnectPacket, EncryptionRequest, Handshake, IntoResponse, Login, LoginSuccessPacket,
 };
 use rsa::RsaPrivateKey;
 use tokio::net::TcpStream;
@@ -43,7 +43,25 @@ impl Player {
                     );
                     self.state = PacketState::Login;
                 }
-                PacketEnum::Login(_) => {
+                PacketEnum::Login(Login {
+                    name,
+                    has_uuid,
+                    uuid,
+                }) => {
+                    self.name = Some(name.clone());
+
+                    if !*has_uuid {
+                        return self
+                            .connection
+                            .send_packet(
+                                &DisconnectPacket::from_reason("Not accepting crack account")
+                                    .to_response(&packet)?,
+                                0x0,
+                            )
+                            .await;
+                    }
+
+                    self.uuid = Some(uuid.clone());
                     let a = EncryptionRequest::new(&rsa.to_public_key())?.to_response(&packet)?;
                     self.connection.send_packet(&a, 0x01).await?;
                 }

@@ -2,6 +2,8 @@ use bytes::Buf;
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
+use serde::Deserialize;
+use serde::Serialize;
 use std::io::Cursor;
 use std::iter::Iterator;
 
@@ -162,3 +164,69 @@ macro_rules! create_var_num {
 
 create_var_num!(i32, VarInt, 32);
 create_var_num!(i64, VarLong, 64);
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Chat {
+    SimpleText(Text),
+    MultiText(Text),
+}
+
+impl Chat {
+    pub fn to_string(self) -> anyhow::Result<String> {
+        return Ok(serde_json::to_string(&self)?);
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Text {
+    text: String,
+
+    #[serde(flatten)]
+    component: Component,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extra: Option<Vec<Text>>,
+}
+
+impl Text {
+    pub fn new(str: &str) -> Self {
+        Text {
+            text: str.to_string(),
+
+            component: Component::default(),
+            extra: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+
+pub struct Component {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bold: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    italic: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    underlined: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strikethrough: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    obfuscated: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    font: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    insertion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    click_event: Option<ClickEvent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hover_event: Option<HoverEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ClickEvent {}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct HoverEvent {}
