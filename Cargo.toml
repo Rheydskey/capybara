@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   'capybara',
+  "capybara-ecs",
   'capybara-macros',
   'capybara-packet',
 ]

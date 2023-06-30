@@ -15,12 +15,14 @@ use tokio::net::{TcpListener, TcpStream};
 extern crate log;
 
 async fn handle_stream(stream: TcpStream, state: Arc<State>) {
-    player::Player::new(stream).handle(&state.rsa).await;
+    println!("{:?}", player::Player::new(stream).handle(&state.rsa).await);
 }
 
 #[tokio::main]
 async fn main() {
     init_log();
+    capybara_ecs::init().await;
+
     let state = Arc::new(State::new());
     let socket = TcpListener::bind("127.0.0.1:25565").await.unwrap();
     loop {

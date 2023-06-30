@@ -24,5 +24,7 @@ cfb8 = "0.8.1"
 # Json
 serde = {version = "1", features = ["derive"]}
 serde_json = {version = "1"}
+
 capybara-macros = {path = '../capybara-macros'}
 capybara-packet = {path = "../capybara-packet"}
+capybara-ecs = {path = "../capybara-ecs"}
