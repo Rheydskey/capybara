@@ -1,6 +1,6 @@
 //! Network packet handling for Minecraft server
 
-use aes::cipher::{AsyncStreamCipher, BlockDecryptMut, KeyIvInit};
+use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use anyhow::Result;
 use bytes::{Bytes, BytesMut};
 use capybara_packet::Packet;

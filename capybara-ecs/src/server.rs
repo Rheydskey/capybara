@@ -1,16 +1,35 @@
-use std::{
-    collections::VecDeque,
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
-    sync::{Arc, RwLock},
-};
+use std::collections::VecDeque;
+
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::{Arc, RwLock};
 
 use bevy::prelude::{App, EventWriter, Plugin, Res, ResMut, Resource};
 use bytes::Bytes;
+use log::{error, info};
 
 use crate::event::Events;
 
-pub type Stream = Arc<RwLock<TcpStream>>;
+#[derive(Clone, Debug)]
+pub struct Stream {
+    pub stream: Arc<TcpStream>,
+}
+
+impl Stream {
+    pub fn new(stream: TcpStream) -> Self {
+        Self {
+            stream: Arc::new(stream),
+        }
+    }
+
+    pub fn read(&self) -> TcpStream {
+        self.stream.try_clone().unwrap()
+    }
+
+    pub fn write(&self) -> TcpStream {
+        self.stream.try_clone().unwrap()
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct SendQueue(pub VecDeque<Message>);
@@ -44,7 +63,7 @@ pub fn read(stream: &mut TcpStream) -> Option<Bytes> {
             return Some(Bytes::copy_from_slice(&buf[..n]));
         }
     } else {
-        println!("{:?}", read);
+        error!("{:?}", read);
     }
 
     None
@@ -56,24 +75,24 @@ pub fn recv_packet(
     mut net: ResMut<NetworkManager>,
 ) {
     while let Ok((tcpstream, _)) = socket.0.accept() {
-        let tcpstream = Arc::new(RwLock::new(tcpstream));
-        net.0.push(tcpstream.clone());
-        events.send(Events::Connected(tcpstream.clone()));
+        info!("Received an new stream");
+        let stream = Stream::new(tcpstream);
+        net.0.push(stream.clone());
+        events.send(Events::Connected(stream));
     }
 
     let mut to_remove = Vec::new();
     for (i, tcpstream) in net.0.iter().enumerate() {
-        let mut lock = tcpstream.write().unwrap();
+        let mut lock = tcpstream.write();
 
-        if let Some(buf) = read(&mut *lock) {
-            events.send(Events::Message(tcpstream.clone(), buf))
-        } else {
-            to_remove.push(i);
-        }
+        read(&mut lock).map_or_else(
+            || to_remove.push(i),
+            |buf| events.send(Events::Message(tcpstream.clone(), buf)),
+        );
     }
 
     for index in to_remove {
-        println!("Remove: {}", index);
+        info!("Remove: {}", index);
         net.0.remove(index);
     }
 }
@@ -81,11 +100,14 @@ pub fn recv_packet(
 pub fn send_packet(mut transport: ResMut<SendQueue>) {
     let to_send = transport.0.drain(..);
     for i in to_send {
-        println!("Send packet");
+        info!("Send packet");
+
+        println!("{:?}", i.1);
+
         let stream = i.0;
 
-        let mut lock = stream.write().unwrap();
+        stream.write().write(&i.1).unwrap();
 
-        lock.write(&i.1).unwrap();
+        println!("Sended");
     }
 }
