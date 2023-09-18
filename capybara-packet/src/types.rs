@@ -2,12 +2,16 @@ use bytes::Buf;
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
+use capybara_macros::packet;
 use serde::Deserialize;
 use serde::Serialize;
 use std::io::Cursor;
 use std::iter::Iterator;
 
 use rsa::RsaPrivateKey;
+
+use crate::IntoResponse;
+use crate::Packet;
 
 #[derive(Debug)]
 pub struct RawPacket {
@@ -50,7 +54,18 @@ impl RawPacket {
             ),
         }
     }
+
+    pub fn from_intoresponse(
+        toresponse: impl IntoResponse,
+        packet: &Packet,
+        packetid: i32,
+    ) -> Self {
+        let bytes = toresponse.to_response(packet).unwrap();
+
+        Self::from_bytes(&bytes, packetid)
+    }
 }
+
 #[derive(Debug)]
 pub struct State {
     pub rsa: rsa::RsaPrivateKey,

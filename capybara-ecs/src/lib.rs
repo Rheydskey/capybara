@@ -10,7 +10,8 @@ use event::Events;
 use bevy::{
     app::App,
     prelude::{
-        Bundle, Commands, Component, DespawnRecursiveExt, Entity, EventReader, Query, ResMut, With,
+        Bundle, Commands, Component, DespawnRecursiveExt, Entity, EventReader, Query, ResMut,
+        Update, With,
     },
     MinimalPlugins,
 };
@@ -25,11 +26,11 @@ pub fn init() {
 
     App::new()
         .insert_resource(Listener(socket))
-        .add_plugin(ServerPlugin)
+        .add_plugins(ServerPlugin)
         .add_plugins(MinimalPlugins)
-        .add_plugin(Log)
-        .add_system(connection_handler)
-        .add_system(player_play)
+        .add_plugins(Log)
+        .add_systems(Update, connection_handler)
+        .add_systems(Update, player_play)
         .run();
 }
 
@@ -106,31 +107,32 @@ fn connection_handler(
             Events::Message(socket, msg) => {
                 info!("{msg:?}");
 
-                let entity = player
-                    .iter()
-                    .filter_map(|(entity, stream)| {
-                        if stream.is_eq(socket) {
-                            return Some(entity);
-                        }
-
-                        None
-                    })
-                    .collect::<Vec<_>>();
-
-                info!("{:?}", entity);
-
-                let Some(entity) = entity.first() else {
-                    return;
-                };
-
-                commands
-                    .get_entity(*entity)
-                    .unwrap()
-                    .insert(PacketName("ee".to_string()));
-
                 let rawpacket = RawPacket::read(msg).unwrap();
 
                 let mut packet = capybara_packet::Packet::new();
+
+                packet
+                    .parse_from_rawpacket(&capybara_packet::helper::PacketState::None, &rawpacket);
+
+                println!("{:?}", rawpacket);
+
+                if let capybara_packet::helper::PacketEnum::HandShake(handshake) =
+                    &packet.packetdata
+                {
+                    if handshake.next_state == 1 {
+                        let disconnect = RawPacket::from_intoresponse(
+                            capybara_packet::StatusPacket::default(),
+                            &packet,
+                            0x0,
+                        );
+
+                        transport
+                            .0
+                            .push_front(Message(socket.clone(), disconnect.data));
+
+                        return;
+                    }
+                }
 
                 let disconnect = RawPacket::from_bytes(
                     &capybara_packet::DisconnectPacket::from_reason("Implementing")

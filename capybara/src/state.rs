@@ -1,6 +1,6 @@
 use rsa::RsaPrivateKey;
 
-use crate::{network::ClientConnection, player::Player};
+use crate::player::Player;
 
 #[derive(Debug)]
 pub struct State {

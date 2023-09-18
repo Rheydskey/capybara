@@ -2,9 +2,9 @@ use std::collections::VecDeque;
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use bevy::prelude::{App, EventWriter, Plugin, Res, ResMut, Resource};
+use bevy::prelude::{App, EventWriter, Plugin, Res, ResMut, Resource, Update};
 use bytes::Bytes;
 use log::{error, info};
 
@@ -49,8 +49,8 @@ impl Plugin for ServerPlugin {
         app.insert_resource(NetworkManager::default())
             .insert_resource(SendQueue::default())
             .add_event::<Events>()
-            .add_system(recv_packet)
-            .add_system(send_packet);
+            .add_systems(Update, recv_packet)
+            .add_systems(Update, send_packet);
     }
 }
 

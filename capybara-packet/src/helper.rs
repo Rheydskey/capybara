@@ -99,10 +99,17 @@ impl PacketString {
     pub fn from_cursor(bytes: &mut Cursor<&[u8]>) -> anyhow::Result<Self> {
         let string_size = VarInt::new().read_from_cursor(bytes)?;
 
-        let bytes_string = bytes
-            .chunk()
+        let chunk = bytes.chunk();
+
+        let bytes_string = chunk
             .get(..string_size.unsigned_abs() as usize)
-            .ok_or_else(|| anyhow!("Bytes array too small"))?
+            .ok_or_else(|| {
+                anyhow!(
+                    "Bytes array too small : Want {} but array lenght is {}",
+                    string_size.unsigned_abs() as usize,
+                    chunk.len()
+                )
+            })?
             .to_vec();
 
         bytes.advance(string_size.unsigned_abs() as usize);

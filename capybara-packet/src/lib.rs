@@ -220,3 +220,41 @@ impl DisconnectPacket {
         Self { reason }
     }
 }
+
+#[derive(Debug, packet)]
+pub struct StatusPacket {
+    #[string]
+    json_response: String,
+}
+
+impl Default for StatusPacket {
+    fn default() -> Self {
+        Self {
+            json_response: String::from(
+                r#"
+{
+    "version": {
+        "name": "1.19.4",
+        "protocol": 762
+    },
+    "players": {
+        "max": 100,
+        "online": 1,
+        "sample": [
+            {
+                "name": "NoName",
+                "id": "4566e69f-c907-48ee-8d71-d7ba5aa00d20"
+            }
+        ]
+    },
+    "description": {
+        "text": "Hello world"
+    },
+    "enforcesSecureChat": true,
+    "previewsChat": true
+}
+"#,
+            ),
+        }
+    }
+}
