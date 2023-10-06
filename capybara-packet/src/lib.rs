@@ -35,12 +35,18 @@ impl Packet {
         }
     }
 
-    pub fn parse_from_rawpacket(&mut self, state: &PacketState, rawpacket: &RawPacket) {
-        let packet = parse_packet(rawpacket.packetid, state, &rawpacket.data).unwrap();
+    pub fn parse_from_rawpacket(
+        &mut self,
+        state: &PacketState,
+        rawpacket: &RawPacket,
+    ) -> anyhow::Result<()> {
+        let packet = parse_packet(rawpacket.packetid, state, &rawpacket.data)?;
 
         info!("{packet:?}");
 
         self.packetdata = packet;
+
+        Ok(())
     }
 
     /// # Errors

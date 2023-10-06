@@ -4,25 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = {version = "1.32.0", features=["full"]}
-bytes = "1.5.0"
-anyhow = "1.0.75"
-thiserror = "1.0.48"
-uuid = "1.4.1"
-
-
-# Log
-log = "0.4.20"
-
-# Crypto
-rsa = "0.9.2"
-rand = "0.8.5"
-aes = "0.8.3"
-cfb8 = "0.8.1"
-
-# Json
-serde = {version = "1", features = ["derive"]}
-serde_json = {version = "1"}
+tokio = {version = "1.32.0", features=["full" ]}
 
 capybara-macros = {path = '../capybara-macros'}
 capybara-packet = {path = "../capybara-packet"}

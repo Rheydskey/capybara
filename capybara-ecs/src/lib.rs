@@ -4,34 +4,44 @@ mod logger;
 mod server;
 
 use crate::{logger::Log, server::Message};
-use capybara_packet::{types::RawPacket, IntoResponse};
+use capybara_packet::{helper::PacketState, types::RawPacket, IntoResponse, Packet};
 use event::Events;
 
 use bevy::{
-    app::App,
+    app::{App, ScheduleRunnerPlugin},
     prelude::{
-        Bundle, Commands, Component, DespawnRecursiveExt, Entity, EventReader, Query, ResMut,
-        Update, With,
+        Bundle, Commands, Component, Entity, EventReader, IntoSystemConfigs, IntoSystemSetConfigs,
+        PreUpdate, Query, ResMut, SystemSet, Update,
     },
-    MinimalPlugins,
 };
 use server::{Listener, SendQueue, ServerPlugin};
-use std::{collections::VecDeque, net::TcpListener};
+use std::{net::TcpListener, time::Duration};
 
-use log::info;
+use log::{error, info};
 
 pub fn init() {
-    let socket = TcpListener::bind("127.0.0.1:25565").unwrap();
-    socket.set_nonblocking(true).unwrap();
-
     App::new()
-        .insert_resource(Listener(socket))
         .add_plugins(ServerPlugin)
-        .add_plugins(MinimalPlugins)
         .add_plugins(Log)
-        .add_systems(Update, connection_handler)
-        .add_systems(Update, player_play)
+        .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+            1. / 20.,
+        )))
+        .configure_sets(Update, (PacketSet::Parsing, PacketSet::Handling).chain())
+        .add_systems(PreUpdate, connection_handler)
+        .add_systems(
+            Update,
+            (
+                packet_parse.in_set(PacketSet::Parsing),
+                packet_handler.in_set(PacketSet::Handling),
+            ),
+        )
         .run();
+}
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum PacketSet {
+    Parsing,
+    Handling,
 }
 
 #[derive(Debug, Component)]
@@ -40,7 +50,7 @@ struct PacketName(String);
 #[derive(Debug, Component)]
 struct Name(String);
 
-#[derive(Debug, Component)]
+#[derive(Debug, Clone, Component)]
 struct Stream(server::Stream);
 
 impl Stream {
@@ -54,97 +64,129 @@ impl Stream {
 }
 
 #[derive(Debug, Component)]
+struct PacketQueue(Vec<Packet>);
+
+impl PacketQueue {
+    pub fn push(&mut self, packet: Packet) {
+        self.0.push(packet);
+    }
+}
+
+#[derive(Debug, Component)]
 struct Uuid(uuid::Uuid);
-
-#[derive(Debug, Component)]
-struct Packet(capybara_packet::Packet);
-
-#[derive(Debug, Component)]
-struct Packets(VecDeque<Packet>);
 
 #[derive(Bundle)]
 struct Player {
     pub stream: Stream,
+    pub packetqueue: PacketQueue,
+    pub state: PacketStateComponent,
 }
 
-fn player_play(
-    mut commands: Commands,
-    query: Query<&Name, With<PacketName>>,
-    players: Query<Entity>,
-) {
-    query.par_iter().for_each(|packetname| {
-        log::info!("{:?}", packetname);
-    });
-
-    players.iter().for_each(|player| {
-        commands.get_entity(player).unwrap().remove::<PacketName>();
-        commands.get_entity(player).unwrap().despawn_recursive();
-    });
+#[derive(Debug, Component)]
+struct PacketStateComponent {
+    state: PacketState,
 }
 
-fn connection_handler(
-    mut commands: Commands,
+fn packet_parse(
     mut events: EventReader<Events>,
-    mut transport: ResMut<SendQueue>,
-    player: Query<(Entity, &Stream)>,
+    mut query_player: Query<(
+        Entity,
+        &Stream,
+        &mut PacketQueue,
+        Option<&PacketStateComponent>,
+    )>,
 ) {
     for event in &mut events {
-        match event {
-            Events::Connected(socket) => {
-                let id = commands
-                    .spawn(Player {
-                        stream: Stream(socket.clone()),
-                    })
-                    .id();
+        if let Events::Message(stream, msg) = event {
+            for (_, strm, mut packetqueue, state) in query_player.iter_mut() {
+                if !strm.is_eq(stream) {
+                    continue;
+                }
 
-                info!("Entity {:?}", id);
-                let mut new_entity = commands.spawn_empty();
-                new_entity.insert(Player {
-                    stream: Stream(socket.clone()),
-                });
-            }
-
-            Events::Message(socket, msg) => {
-                info!("{msg:?}");
-
-                let rawpacket = RawPacket::read(msg).unwrap();
+                let rawpacket = match RawPacket::read(&msg) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        error!("{}", error);
+                        return;
+                    }
+                };
 
                 let mut packet = capybara_packet::Packet::new();
 
-                packet
-                    .parse_from_rawpacket(&capybara_packet::helper::PacketState::None, &rawpacket);
+                let packet_state = if let Some(packet_state) = &state {
+                    &packet_state.state
+                } else {
+                    &PacketState::None
+                };
 
-                println!("{:?}", rawpacket);
+                if let Err(error) = packet.parse_from_rawpacket(&packet_state, &rawpacket) {
+                    error!("{error}");
+                };
 
-                if let capybara_packet::helper::PacketEnum::HandShake(handshake) =
-                    &packet.packetdata
-                {
-                    if handshake.next_state == 1 {
-                        let disconnect = RawPacket::from_intoresponse(
-                            capybara_packet::StatusPacket::default(),
-                            &packet,
-                            0x0,
-                        );
+                packetqueue.push(packet);
+            }
+        }
+    }
+}
 
-                        transport
-                            .0
-                            .push_front(Message(socket.clone(), disconnect.data));
+fn packet_handler(
+    mut commands: Commands,
+    mut transport: ResMut<SendQueue>,
+    mut query_player: Query<(Entity, &Stream, &mut PacketQueue)>,
+) {
+    for (player, socket, mut packet_queue) in query_player.iter_mut() {
+        for packet in packet_queue.0.drain(..) {
+            info!("{packet:?}");
 
-                        return;
-                    }
+            if let capybara_packet::helper::PacketEnum::HandShake(handshake) = &packet.packetdata {
+                if handshake.next_state == 1 {
+                    let disconnect = RawPacket::from_intoresponse(
+                        capybara_packet::StatusPacket::default(),
+                        &packet,
+                        0x0,
+                    );
+
+                    transport
+                        .0
+                        .push_front(Message(socket.0.clone(), disconnect.data));
+
+                    continue;
                 }
 
-                let disconnect = RawPacket::from_bytes(
-                    &capybara_packet::DisconnectPacket::from_reason("Implementing")
-                        .to_response(&packet)
-                        .unwrap(),
-                    0x0,
-                );
-
-                transport
-                    .0
-                    .push_front(Message(socket.clone(), disconnect.data));
+                if handshake.next_state == 2 {
+                    commands.entity(player).insert(PacketStateComponent {
+                        state: PacketState::Handshake,
+                    });
+                    continue;
+                }
             }
+
+            let disconnect = RawPacket::from_bytes(
+                &capybara_packet::DisconnectPacket::from_reason("Implementing")
+                    .to_response(&packet)
+                    .unwrap(),
+                0x0,
+            );
+
+            transport
+                .0
+                .push_front(Message(socket.0.clone(), disconnect.data));
+        }
+    }
+}
+
+fn connection_handler(mut commands: Commands, mut events: EventReader<Events>) {
+    for event in &mut events {
+        if let Events::Connected(socket) = event {
+            let entity = commands.spawn(Player {
+                stream: Stream(socket.clone()),
+                packetqueue: PacketQueue(Vec::new()),
+                state: PacketStateComponent {
+                    state: PacketState::None,
+                },
+            });
+
+            info!("Entity {:?}", entity.id());
         }
     }
 }
