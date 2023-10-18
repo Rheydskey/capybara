@@ -1,26 +1,29 @@
 mod component;
 mod event;
 mod logger;
+mod parsing;
 mod server;
 
 use crate::{logger::Log, server::Message};
-use capybara_packet::{helper::PacketState, types::RawPacket, IntoResponse, Packet};
+use capybara_packet::{helper::PacketState, types::RawPacket, Packet};
 use event::Events;
 
 use bevy::{
     app::{App, ScheduleRunnerPlugin},
     prelude::{
         Bundle, Commands, Component, Entity, EventReader, IntoSystemConfigs, IntoSystemSetConfigs,
-        PreUpdate, Query, ResMut, SystemSet, Update,
+        PreUpdate, Query, ResMut, SystemSet, TaskPoolPlugin, Update,
     },
 };
-use server::{Listener, SendQueue, ServerPlugin};
-use std::{net::TcpListener, time::Duration};
+use parsing::ParseTask;
+use server::{SendQueue, ServerPlugin, Stream};
+use std::time::Duration;
 
 use log::{error, info};
 
 pub fn init() {
     App::new()
+        .add_plugins(TaskPoolPlugin::default())
         .add_plugins(ServerPlugin)
         .add_plugins(Log)
         .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
@@ -32,7 +35,7 @@ pub fn init() {
             Update,
             (
                 packet_parse.in_set(PacketSet::Parsing),
-                packet_handler.in_set(PacketSet::Handling),
+                (ping_status).chain().in_set(PacketSet::Handling),
             ),
         )
         .run();
@@ -50,36 +53,14 @@ struct PacketName(String);
 #[derive(Debug, Component)]
 struct Name(String);
 
-#[derive(Debug, Clone, Component)]
-struct Stream(server::Stream);
-
-impl Stream {
-    pub fn is_eq(&self, cmp: &server::Stream) -> bool {
-        if let (Ok(peer_addr), Ok(cmp_peer)) = (self.0.read().peer_addr(), cmp.read().peer_addr()) {
-            return peer_addr == cmp_peer;
-        }
-
-        false
-    }
-}
-
-#[derive(Debug, Component)]
-struct PacketQueue(Vec<Packet>);
-
-impl PacketQueue {
-    pub fn push(&mut self, packet: Packet) {
-        self.0.push(packet);
-    }
-}
-
 #[derive(Debug, Component)]
 struct Uuid(uuid::Uuid);
 
 #[derive(Bundle)]
 struct Player {
     pub stream: Stream,
-    pub packetqueue: PacketQueue,
     pub state: PacketStateComponent,
+    pub event: ParseTask,
 }
 
 #[derive(Debug, Component)]
@@ -87,30 +68,20 @@ struct PacketStateComponent {
     state: PacketState,
 }
 
+#[derive(Debug, Component)]
+struct PingStatus(pub Packet);
+
 fn packet_parse(
+    mut commands: Commands,
     mut events: EventReader<Events>,
-    mut query_player: Query<(
-        Entity,
-        &Stream,
-        &mut PacketQueue,
-        Option<&PacketStateComponent>,
-    )>,
+    mut query_player: Query<(Entity, &Stream, Option<&PacketStateComponent>)>,
 ) {
     for event in &mut events {
-        if let Events::Message(stream, msg) = event {
-            for (_, strm, mut packetqueue, state) in query_player.iter_mut() {
+        if let Events::Message(stream, rawpacket) = event {
+            for (player, strm, state) in query_player.iter_mut() {
                 if !strm.is_eq(stream) {
                     continue;
                 }
-
-                let rawpacket = match RawPacket::read(&msg) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        error!("{}", error);
-                        return;
-                    }
-                };
-
                 let mut packet = capybara_packet::Packet::new();
 
                 let packet_state = if let Some(packet_state) = &state {
@@ -123,19 +94,36 @@ fn packet_parse(
                     error!("{error}");
                 };
 
-                packetqueue.push(packet);
+                commands.entity(player).insert(PingStatus(packet));
             }
         }
+    }
+}
+
+fn ping_status(
+    mut commands: Commands,
+    mut transport: ResMut<SendQueue>,
+    query_player: Query<(Entity, &Stream, &PingStatus)>,
+) {
+    for (player, stream, packet) in query_player.iter() {
+        let disconnect =
+            RawPacket::from_intoresponse(capybara_packet::StatusPacket::default(), &packet.0, 0x0);
+
+        transport
+            .0
+            .push_front(Message(stream.clone(), disconnect.data));
+
+        commands.entity(player).remove::<PingStatus>();
     }
 }
 
 fn packet_handler(
     mut commands: Commands,
     mut transport: ResMut<SendQueue>,
-    mut query_player: Query<(Entity, &Stream, &mut PacketQueue)>,
+    mut query_player: Query<(Entity, &Stream)>,
 ) {
-    for (player, socket, mut packet_queue) in query_player.iter_mut() {
-        for packet in packet_queue.0.drain(..) {
+    for (player, socket) in query_player.iter_mut() {
+        /*        for packet in packet_queue.0.drain(..) {
             info!("{packet:?}");
 
             if let capybara_packet::helper::PacketEnum::HandShake(handshake) = &packet.packetdata {
@@ -171,7 +159,7 @@ fn packet_handler(
             transport
                 .0
                 .push_front(Message(socket.0.clone(), disconnect.data));
-        }
+        }*/
     }
 }
 
@@ -179,8 +167,8 @@ fn connection_handler(mut commands: Commands, mut events: EventReader<Events>) {
     for event in &mut events {
         if let Events::Connected(socket) = event {
             let entity = commands.spawn(Player {
-                stream: Stream(socket.clone()),
-                packetqueue: PacketQueue(Vec::new()),
+                event: ParseTask::new(socket.stream.clone()),
+                stream: socket.clone(),
                 state: PacketStateComponent {
                     state: PacketState::None,
                 },

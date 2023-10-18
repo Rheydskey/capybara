@@ -37,6 +37,18 @@ impl RawPacket {
         })
     }
 
+    pub fn read_lenght_given(bytes: &Bytes, lenght: i32) -> anyhow::Result<Self> {
+        let mut cursor = Cursor::new(bytes);
+
+        let mut packetid = VarInt::new();
+        let packetid = packetid.read_from_cursor_bytes(&mut cursor)?;
+        Ok(Self {
+            lenght,
+            packetid,
+            data: Bytes::copy_from_slice(&bytes[cursor.position() as usize..]),
+        })
+    }
+
     pub fn from_bytes(bytes: &Bytes, packetid: i32) -> Self {
         let mut bytespacketid = BytesMut::new();
 
@@ -98,7 +110,7 @@ macro_rules! create_var_num {
             }
 
             pub fn try_with(&mut self, byte: u8) -> ::anyhow::Result<Option<$t>> {
-                self.result |= ((byte.clone() as $t & Self::SEGMENT_BITS) << self.position);
+                self.result |= ((byte as $t & Self::SEGMENT_BITS) << self.position);
 
                 self.position += 7;
 
@@ -106,7 +118,7 @@ macro_rules! create_var_num {
                     return Err(::anyhow::anyhow!("Too long").into());
                 }
 
-                if (byte.clone() as $t & Self::CONTINUE_BIT) == 0 {
+                if (byte as $t & Self::CONTINUE_BIT) == 0 {
                     return Ok(Some(self.result));
                 }
 

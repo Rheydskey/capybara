@@ -1,18 +1,21 @@
 use std::collections::VecDeque;
 
-use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
 use bevy::prelude::{
-    App, Component, EventWriter, Plugin, PostUpdate, PreUpdate, Res, ResMut, Resource, Update,
+    App, Commands, Component, Entity, EventWriter, IntoSystemConfigs, Plugin, PreUpdate, Query,
+    Res, Resource, SystemSet,
 };
 use bytes::Bytes;
-use log::{error, info};
+use capybara_packet::types::RawPacket;
+use capybara_packet::{IntoResponse, Packet};
+use log::info;
 
 use crate::event::Events;
+use crate::parsing::ParseTask;
 
-#[derive(Clone, Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct Stream {
     pub stream: Arc<TcpStream>,
 }
@@ -28,8 +31,12 @@ impl Stream {
         self.stream.try_clone().unwrap()
     }
 
-    pub fn write(&self) -> TcpStream {
-        self.stream.try_clone().unwrap()
+    pub fn is_eq(&self, cmp: &Self) -> bool {
+        if let (Ok(peer_addr), Ok(cmp_peer)) = (self.read().peer_addr(), cmp.read().peer_addr()) {
+            return peer_addr == cmp_peer;
+        }
+
+        false
     }
 }
 
@@ -42,12 +49,6 @@ pub struct Message(pub Stream, pub Bytes);
 #[derive(Resource)]
 pub struct Listener(pub TcpListener);
 
-#[derive(Resource, Default, Debug)]
-pub struct NetworkManager(Vec<Stream>);
-
-#[derive(Resource, Default, Debug)]
-pub struct DeleteQueue(pub VecDeque<usize>);
-
 pub struct ServerPlugin;
 
 impl Plugin for ServerPlugin {
@@ -55,73 +56,63 @@ impl Plugin for ServerPlugin {
         let socket = TcpListener::bind("127.0.0.1:25565").unwrap();
         socket.set_nonblocking(true).unwrap();
 
-        app.insert_resource(NetworkManager::default())
-            .insert_resource(SendQueue::default())
+        app.insert_resource(SendQueue::default())
             .insert_resource(Listener(socket))
-            .insert_resource(DeleteQueue::default())
             .add_event::<Events>()
-            .add_systems(PreUpdate, clear_dead_socket)
-            .add_systems(PreUpdate, recv_packet)
-            .add_systems(PostUpdate, send_packet);
+            .configure_sets(
+                PreUpdate,
+                (
+                    ConnexionSet::CleanNetManager,
+                    ConnexionSet::InsertNewConnection,
+                    ConnexionSet::ReadStream,
+                ),
+            )
+            .add_systems(
+                PreUpdate,
+                (
+                    clear_dead_socket.in_set(ConnexionSet::CleanNetManager),
+                    recv_connection.in_set(ConnexionSet::InsertNewConnection),
+                    recv_packet.in_set(ConnexionSet::ReadStream),
+                ),
+            );
     }
 }
 
-pub fn read(stream: &mut TcpStream) -> Option<Bytes> {
-    let mut buf = [0; 4096];
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum ConnexionSet {
+    CleanNetManager,
+    InsertNewConnection,
+    ReadStream,
+}
 
-    let read = stream.read(&mut buf);
-    if let Ok(n) = read {
-        if n > 0 {
-            return Some(Bytes::copy_from_slice(&buf[..n]));
+pub fn clear_dead_socket(mut commands: Commands, tasks: Query<(Entity, &ParseTask)>) {
+    for (entity, task) in tasks.iter() {
+        if task.is_finished() {
+            commands.entity(entity).despawn();
         }
-    } else {
-        error!("{:?}", read);
-    }
-
-    None
-}
-
-pub fn clear_dead_socket(mut net: ResMut<NetworkManager>, mut deletequeue: ResMut<DeleteQueue>) {
-    while let Some(index) = deletequeue.0.pop_back() {
-        info!("Remove: {}", index);
-        net.0.remove(index);
     }
 }
 
-pub fn recv_packet(
-    socket: Res<Listener>,
-    mut events: EventWriter<Events>,
-    mut net: ResMut<NetworkManager>,
-    mut deletequeue: ResMut<DeleteQueue>,
-) {
-    while let Ok((tcpstream, _)) = socket.0.accept() {
-        info!("Received an new stream");
+pub fn recv_connection(socket: Res<Listener>, mut events: EventWriter<Events>) {
+    if let Ok((tcpstream, _)) = socket.0.accept() {
         let stream = Stream::new(tcpstream);
-        net.0.push(stream.clone());
         events.send(Events::Connected(stream));
     }
-
-    for (i, tcpstream) in net.0.iter().enumerate() {
-        let mut lock = tcpstream.write();
-
-        read(&mut lock).map_or_else(
-            || deletequeue.0.push_front(i),
-            |buf| events.send(Events::Message(tcpstream.clone(), buf)),
-        );
-    }
 }
 
-pub fn send_packet(mut transport: ResMut<SendQueue>) {
-    let to_send = transport.0.drain(..);
-    for i in to_send {
-        info!("Send packet");
+pub fn recv_packet(tasks: Query<&ParseTask>) {
+    for i in tasks.iter() {
+        for packet in i.get_packet() {
+            info!("{:?}", packet);
 
-        println!("{:?}", i.1);
-
-        let stream = i.0;
-
-        stream.write().write(&i.1).unwrap();
-
-        println!("Sended");
+            let packet = Packet::new();
+            let rawpacket = RawPacket::from_bytes(
+                &capybara_packet::DisconnectPacket::from_reason("Implementing")
+                    .to_response(&packet)
+                    .unwrap(),
+                0x0,
+            );
+            i.send_packet(rawpacket.data).unwrap();
+        }
     }
 }
