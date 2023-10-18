@@ -117,52 +117,6 @@ fn ping_status(
     }
 }
 
-fn packet_handler(
-    mut commands: Commands,
-    mut transport: ResMut<SendQueue>,
-    mut query_player: Query<(Entity, &Stream)>,
-) {
-    for (player, socket) in query_player.iter_mut() {
-        /*        for packet in packet_queue.0.drain(..) {
-            info!("{packet:?}");
-
-            if let capybara_packet::helper::PacketEnum::HandShake(handshake) = &packet.packetdata {
-                if handshake.next_state == 1 {
-                    let disconnect = RawPacket::from_intoresponse(
-                        capybara_packet::StatusPacket::default(),
-                        &packet,
-                        0x0,
-                    );
-
-                    transport
-                        .0
-                        .push_front(Message(socket.0.clone(), disconnect.data));
-
-                    continue;
-                }
-
-                if handshake.next_state == 2 {
-                    commands.entity(player).insert(PacketStateComponent {
-                        state: PacketState::Handshake,
-                    });
-                    continue;
-                }
-            }
-
-            let disconnect = RawPacket::from_bytes(
-                &capybara_packet::DisconnectPacket::from_reason("Implementing")
-                    .to_response(&packet)
-                    .unwrap(),
-                0x0,
-            );
-
-            transport
-                .0
-                .push_front(Message(socket.0.clone(), disconnect.data));
-        }*/
-    }
-}
-
 fn connection_handler(mut commands: Commands, mut events: EventReader<Events>) {
     for event in &mut events {
         if let Events::Connected(socket) = event {

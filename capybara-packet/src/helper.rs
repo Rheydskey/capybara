@@ -79,14 +79,13 @@ impl PacketUUID {
 }
 
 pub struct PacketString {
-    size: i32,
     inner: String,
 }
 
 impl PacketString {
     #[must_use]
-    pub const fn new(size: i32, inner: String) -> Self {
-        Self { size, inner }
+    pub const fn new(inner: String) -> Self {
+        Self { inner }
     }
 
     /// Return a `PacketString` from bytes
@@ -116,7 +115,7 @@ impl PacketString {
 
         let string = String::from_utf8(bytes_string)?;
 
-        Ok(Self::new(string_size, string))
+        Ok(Self::new(string))
     }
 
     /// Return encoded string for minecraft packet

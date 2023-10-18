@@ -2,7 +2,6 @@ use bytes::Buf;
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
-use capybara_macros::packet;
 use serde::Deserialize;
 use serde::Serialize;
 use std::io::Cursor;
