@@ -105,7 +105,7 @@ impl Reader {
             }
         }
 
-        return Err(anyhow::anyhow!("Weird error"));
+        Err(anyhow::anyhow!("Weird error"))
     }
 
     pub async fn run(mut self) {
@@ -149,7 +149,7 @@ impl Reader {
                 continue;
             }
 
-            panic!("Error");
+            return;
         }
     }
 }

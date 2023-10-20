@@ -84,13 +84,11 @@ fn packet_parse(
                 }
                 let mut packet = capybara_packet::Packet::new();
 
-                let packet_state = if let Some(packet_state) = &state {
-                    &packet_state.state
-                } else {
-                    &PacketState::None
-                };
+                let packet_state = state
+                    .as_ref()
+                    .map_or(&PacketState::None, |packet_state| &packet_state.state);
 
-                if let Err(error) = packet.parse_from_rawpacket(&packet_state, &rawpacket) {
+                if let Err(error) = packet.parse_from_rawpacket(packet_state, rawpacket) {
                     error!("{error}");
                 };
 

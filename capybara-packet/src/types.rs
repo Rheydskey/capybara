@@ -32,7 +32,7 @@ impl RawPacket {
         Ok(Self {
             lenght,
             packetid,
-            data: Bytes::copy_from_slice(&bytes[cursor.position() as usize..]),
+            data: Bytes::copy_from_slice(&bytes[usize::try_from(cursor.position()).unwrap()..]),
         })
     }
 
@@ -44,7 +44,7 @@ impl RawPacket {
         Ok(Self {
             lenght,
             packetid,
-            data: Bytes::copy_from_slice(&bytes[cursor.position() as usize..]),
+            data: Bytes::copy_from_slice(&bytes[usize::try_from(cursor.position()).unwrap()..]),
         })
     }
 
@@ -83,11 +83,18 @@ pub struct State {
 }
 
 impl State {
+    #[must_use]
     pub fn new() -> Self {
         let mut rng = rand::thread_rng();
         Self {
             rsa: RsaPrivateKey::new(&mut rng, 1024).unwrap(),
         }
+    }
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -101,6 +108,8 @@ macro_rules! create_var_num {
         impl $n {
             const SEGMENT_BITS: $t = 0x7F;
             const CONTINUE_BIT: $t = 0x80;
+
+            #[must_use]
             pub const fn new() -> Self {
                 Self {
                     result: 0,
@@ -108,6 +117,8 @@ macro_rules! create_var_num {
                 }
             }
 
+            /// # Errors
+            /// Return error if varint is too long
             pub fn try_with(&mut self, byte: u8) -> ::anyhow::Result<Option<$t>> {
                 self.result |= ((byte as $t & Self::SEGMENT_BITS) << self.position);
 
@@ -135,6 +146,9 @@ macro_rules! create_var_num {
 
                 None
             }
+
+            /// # Errors
+            /// Return error if varint is too long
             pub fn read_from_cursor(
                 &mut self,
                 cursor: &mut std::io::Cursor<&[u8]>,
@@ -150,6 +164,8 @@ macro_rules! create_var_num {
                 }
             }
 
+            /// # Errors
+            /// Return error if varint is too long
             pub fn read_from_cursor_bytes(
                 &mut self,
                 cursor: &mut std::io::Cursor<&Bytes>,
@@ -200,7 +216,7 @@ pub enum Chat {
 
 impl Chat {
     pub fn to_string(self) -> anyhow::Result<String> {
-        return Ok(serde_json::to_string(&self)?);
+        Ok(serde_json::to_string(&self)?)
     }
 }
 
@@ -217,9 +233,8 @@ pub struct Text {
 
 impl Text {
     pub fn new(str: &str) -> Self {
-        Text {
+        Self {
             text: str.to_string(),
-
             component: Component::default(),
             extra: None,
         }
@@ -227,7 +242,6 @@ impl Text {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
-
 pub struct Component {
     #[serde(skip_serializing_if = "Option::is_none")]
     bold: Option<bool>,
