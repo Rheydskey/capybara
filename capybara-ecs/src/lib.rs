@@ -1,4 +1,3 @@
-mod component;
 mod event;
 mod logger;
 mod parsing;

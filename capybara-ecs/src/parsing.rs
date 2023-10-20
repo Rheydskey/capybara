@@ -149,7 +149,7 @@ impl Reader {
                 continue;
             }
 
-            panic!("Error");
+            panic!("Stream seems dead");
         }
     }
 }

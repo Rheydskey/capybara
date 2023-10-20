@@ -8,12 +8,14 @@ use bevy::prelude::{
     Res, Resource, SystemSet,
 };
 use bytes::Bytes;
+use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::types::RawPacket;
-use capybara_packet::{IntoResponse, Packet};
+use capybara_packet::{Handshake, IntoResponse, Packet, PingRequest, StatusPacket};
 use log::info;
 
 use crate::event::Events;
 use crate::parsing::ParseTask;
+use crate::PacketStateComponent;
 
 #[derive(Component, Clone, Debug)]
 pub struct Stream {
@@ -100,12 +102,46 @@ pub fn recv_connection(socket: Res<Listener>, mut events: EventWriter<Events>) {
     }
 }
 
-pub fn recv_packet(tasks: Query<&ParseTask>) {
-    for i in tasks.iter() {
-        for packet in i.get_packet() {
-            info!("{:?}", packet);
+pub fn recv_packet(mut tasks: Query<(&mut PacketStateComponent, &ParseTask)>) {
+    for (mut packetstate, i) in tasks.iter_mut() {
+        for rawpacket in i.get_packet() {
+            let mut packet = Packet::new();
 
-            let packet = Packet::new();
+            packet.parse_from_rawpacket(&packetstate.state, &rawpacket);
+
+            if let PacketEnum::HandShake(Handshake {
+                protocol,
+                address,
+                port,
+                next_state,
+            }) = &packet.packetdata
+            {
+                if *next_state == 1 {
+                    let rpacket = RawPacket::from_bytes(
+                        &StatusPacket::default().to_response(&packet).unwrap(),
+                        0x0,
+                    );
+
+                    i.send_packet(rpacket.data).unwrap();
+
+                    packetstate.state = PacketState::Status
+                }
+            }
+
+            if let PacketEnum::PingRequest(pingrequest) = &packet.packetdata {
+                let rpacket = RawPacket::from_bytes(
+                    &PingRequest {
+                        value: pingrequest.value,
+                    }
+                    .to_response(&packet)
+                    .unwrap(),
+                    0x1,
+                );
+
+                i.send_packet(rpacket.data).unwrap();
+            }
+
+            info!("{packet:?}");
             let rawpacket = RawPacket::from_bytes(
                 &capybara_packet::DisconnectPacket::from_reason("Implementing")
                     .to_response(&packet)

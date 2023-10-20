@@ -264,3 +264,9 @@ impl Default for StatusPacket {
         }
     }
 }
+
+#[derive(packet, Clone, Debug)]
+pub struct PingRequest {
+    #[i64]
+    pub value: i64,
+}

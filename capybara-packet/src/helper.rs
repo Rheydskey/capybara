@@ -1,4 +1,4 @@
-use crate::{EncryptionResponse, Handshake, Login, PacketError, PacketTrait};
+use crate::{EncryptionResponse, Handshake, Login, PacketError, PacketTrait, PingRequest};
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{io::Cursor, ops::Deref};
@@ -28,9 +28,15 @@ pub fn parse_packet(
             Err(PacketError::CannotParse(-1).into())
         }
 
-        0x1 => Ok(PacketEnum::EncryptionResponse(
-            EncryptionResponse::from_bytes(bytes)?,
-        )),
+        0x1 => {
+            if matches!(state, PacketState::Status) {
+                return Ok(PacketEnum::PingRequest(PingRequest::from_bytes(bytes)?));
+            }
+
+            Ok(PacketEnum::EncryptionResponse(
+                EncryptionResponse::from_bytes(bytes)?,
+            ))
+        }
 
         _ => Err(PacketError::CannotParse(packetid).into()),
     }
@@ -43,12 +49,14 @@ pub enum PacketEnum {
     HandShake(Handshake),
     Login(Login),
     EncryptionResponse(EncryptionResponse),
+    PingRequest(PingRequest),
     UnknowPacket(String),
 }
 
 #[derive(Debug, Clone)]
 pub enum PacketState {
     None,
+    Status,
     Handshake,
     State,
     Login,

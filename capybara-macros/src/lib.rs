@@ -8,7 +8,7 @@ use syn::{
 };
 extern crate proc_macro;
 use quote::{quote, ToTokens, TokenStreamExt};
-use typeshelper::{StringHelper, U16helper, U8helper, UuidHelper, VarLong};
+use typeshelper::{I64Helper, StringHelper, U16helper, U8helper, UuidHelper, VarLong};
 
 use crate::{
     field::FType,
@@ -37,6 +37,7 @@ impl ToTokens for IntoResponse {
             "u16" => Self::put_bytes_ts(tokens, &U16helper::encode(&self.0)),
             "bool" => Self::put_u8_ts(tokens, &BoolHelper::encode(&self.0)),
             "uuid" => Self::put_u128_ts(tokens, &UuidHelper::encode(&self.0)),
+            "i64" => Self::put_i64_ts(tokens, &I64Helper::encode(&self.0)),
             _ => unimplemented!(),
         };
     }
@@ -57,6 +58,12 @@ impl IntoResponse {
 
     pub fn put_u128_ts(tokens: &mut proc_macro2::TokenStream, group: &proc_macro2::Group) {
         let put_slice = Group::new(Delimiter::None, quote!(bytes.put_u128(#group);));
+
+        tokens.append(put_slice);
+    }
+
+    pub fn put_i64_ts(tokens: &mut proc_macro2::TokenStream, group: &proc_macro2::Group) {
+        let put_slice = Group::new(Delimiter::None, quote!(bytes.put_i64(#group);));
 
         tokens.append(put_slice);
     }
@@ -96,6 +103,7 @@ impl FromBytes {
             "u16" => U16helper::decode(),
             "bool" => BoolHelper::decode(),
             "uuid" => UuidHelper::decode(),
+            "i64" => I64Helper::decode(),
             _ => unimplemented!("{}", self.0.attribute_type.as_str()),
         };
 
@@ -109,7 +117,7 @@ impl FromBytes {
 /// Panic when invalid data
 #[proc_macro_derive(
     packet,
-    attributes(varint, varlong, arraybytes, string, u8, u16, bool, uuid)
+    attributes(varint, varlong, arraybytes, string, u8, u16, bool, uuid, i64)
 )]
 pub fn derive_packet(item: TokenStream) -> TokenStream {
     let DeriveInput { ident, data, .. } = parse_macro_input!(item);
@@ -134,7 +142,7 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
                 };
 
                 let Some(ident) = seg.path.get_ident() else {
-                   return None;
+                    return None;
                 };
 
                 Some(ident.to_string())
@@ -143,7 +151,7 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
     };
 
     let syn::Data::Struct(ds) = data else {
-      unimplemented!("Derive macro work only on struct")
+        unimplemented!("Derive macro work only on struct")
     };
 
     let methods: Vec<Field> = ds
@@ -152,8 +160,8 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
         .filter_map(|f| {
             let field_name = f.ident.unwrap().to_string();
             let Type::Path(typath) = f.ty else {
-                    return None;
-                };
+                return None;
+            };
 
             let fieldtype;
             if let Some(ident) = typath.path.get_ident() {
