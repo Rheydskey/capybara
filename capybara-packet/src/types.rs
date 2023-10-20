@@ -9,6 +9,7 @@ use std::iter::Iterator;
 
 use rsa::RsaPrivateKey;
 
+use crate::helper::PacketState;
 use crate::IntoResponse;
 use crate::Packet;
 
@@ -74,6 +75,14 @@ impl RawPacket {
         let bytes = toresponse.to_response(packet).unwrap();
 
         Self::from_bytes(&bytes, packetid)
+    }
+
+    pub fn to_packet(self, player_status: &PacketState) -> anyhow::Result<Packet> {
+        let mut packet = Packet::new();
+
+        packet.parse_from_rawpacket(player_status, &self)?;
+
+        Ok(packet)
     }
 }
 

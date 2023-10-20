@@ -163,3 +163,16 @@ impl UuidHelper {
         Group::new(Delimiter::None, quote!(self.#ident.to_u128_le()))
     }
 }
+
+pub struct I64Helper;
+
+impl I64Helper {
+    pub fn decode() -> Group {
+        Group::new(Delimiter::None, quote!(bytes.get_i64()))
+    }
+
+    pub fn encode(field: &Field) -> Group {
+        let ident = Ident::new(&field.ident, Span::call_site());
+        Group::new(Delimiter::None, quote!(self.#ident))
+    }
+}
