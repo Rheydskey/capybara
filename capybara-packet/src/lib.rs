@@ -30,7 +30,6 @@ impl Packet {
         Self {
             lenght: 0,
             packetid: 0,
-
             packetdata: PacketEnum::None,
         }
     }

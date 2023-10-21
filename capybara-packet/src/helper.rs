@@ -17,7 +17,7 @@ pub fn parse_packet(
 ) -> anyhow::Result<PacketEnum> {
     match packetid {
         0x0 => {
-            if matches!(state, PacketState::None) {
+            if matches!(state, PacketState::Handshake) || matches!(state, PacketState::None) {
                 return Ok(PacketEnum::HandShake(Handshake::from_bytes(bytes)?));
             }
 

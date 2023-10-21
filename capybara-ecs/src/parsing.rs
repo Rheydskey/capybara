@@ -4,7 +4,6 @@ use bevy::{
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use capybara_packet::types::{RawPacket, VarInt};
-use log::{error, info};
 use std::{io::Read, net::TcpStream};
 use std::{io::Write, sync::Arc};
 
@@ -45,6 +44,22 @@ impl ParseTask {
     #[inline]
     pub fn is_finished(&self) -> bool {
         self.2.is_finished() || self.3.is_finished()
+    }
+}
+
+impl Iterator for ParseTask {
+    type Item = RawPacket;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.1.iter().next()
+    }
+}
+
+impl Iterator for &ParseTask {
+    type Item = RawPacket;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.1.iter().next()
     }
 }
 
