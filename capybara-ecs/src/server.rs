@@ -4,14 +4,14 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
 use bevy::prelude::{
-    App, Commands, Component, Entity, EventWriter, IntoSystemConfigs, Plugin, PreUpdate, Query,
-    Res, Resource, SystemSet,
+    App, Commands, Component, Entity, IntoSystemConfigs, Plugin, PreUpdate, Query, Res, Resource,
+    SystemSet,
 };
 use bytes::Bytes;
 use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
 
-use crate::event::{Handshake, PacketEventPlugin, PingRequest};
+use crate::event::{GlobalEventWriter, Handshake, PacketEventPlugin, PingRequest};
 use crate::parsing::ParseTask;
 use crate::player::{Player, PlayerStatus, PlayerStatusMarker};
 
@@ -99,8 +99,7 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
 
 pub fn recv_packet(
     mut tasks: Query<(Entity, &ParseTask, &mut PlayerStatus)>,
-    mut handshakeevent: EventWriter<Handshake>,
-    mut pingevent: EventWriter<PingRequest>,
+    mut globalevent: GlobalEventWriter,
 ) {
     for (entity, i, mut state) in tasks.iter_mut() {
         for rawpacket in i.get_packet() {
@@ -118,12 +117,19 @@ pub fn recv_packet(
                         state.0 = PacketState::Login
                     }
 
-                    handshakeevent.send(Handshake(entity, packet.clone()));
-                    continue;
+                    globalevent
+                        .handshake_writer()
+                        .send(Handshake(entity, packet.clone()));
                 }
                 PacketEnum::PingRequest(pingrequest) => {
-                    pingevent.send(PingRequest(entity, pingrequest.clone()));
-                    continue;
+                    globalevent
+                        .ping_writer()
+                        .send(PingRequest(entity, pingrequest.clone()));
+                }
+                PacketEnum::Login(login) => {
+                    globalevent
+                        .login_writer()
+                        .send(crate::event::Login(entity, login.clone()));
                 }
                 PacketEnum::UnknowPacket(packet) => info!("{packet}"),
                 _ => {

@@ -22,7 +22,7 @@ pub fn init() {
         .add_plugins(TaskPoolPlugin::default())
         .add_plugins(Log)
         .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
-            1. / 2000.,
+            1. / 200.,
         )))
         .add_plugins(ServerPlugin)
         .run();
