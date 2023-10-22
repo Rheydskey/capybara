@@ -1,38 +1,16 @@
-use std::collections::VecDeque;
-
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::sync::Arc;
 
 use bevy::prelude::{
-    App, Commands, Component, Entity, IntoSystemConfigs, Plugin, PreUpdate, Query, Res, Resource,
-    SystemSet,
+    App, Commands, Entity, IntoSystemConfigs, Plugin, PreUpdate, Query, Res, Resource, SystemSet,
 };
-use bytes::Bytes;
+
 use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
 
 use crate::event::{GlobalEventWriter, Handshake, PacketEventPlugin, PingRequest};
 use crate::parsing::ParseTask;
 use crate::player::{Player, PlayerStatus, PlayerStatusMarker};
-
-#[derive(Component, Clone, Debug)]
-pub struct Stream {
-    pub stream: Arc<TcpStream>,
-}
-
-impl Stream {
-    pub fn new(stream: TcpStream) -> Self {
-        Self {
-            stream: Arc::new(stream),
-        }
-    }
-}
-
-#[derive(Resource, Default)]
-pub struct SendQueue(pub VecDeque<Message>);
-
-#[derive(Component, Debug)]
-pub struct Message(pub Stream, pub Bytes);
 
 #[derive(Resource)]
 pub struct Listener(pub TcpListener);
@@ -44,8 +22,7 @@ impl Plugin for ServerPlugin {
         let socket = TcpListener::bind("127.0.0.1:25565").unwrap();
         socket.set_nonblocking(true).unwrap();
 
-        app.insert_resource(SendQueue::default())
-            .insert_resource(Listener(socket))
+        app.insert_resource(Listener(socket))
             .configure_sets(
                 PreUpdate,
                 (
@@ -83,11 +60,8 @@ pub fn clear_dead_socket(mut commands: Commands, tasks: Query<(Entity, &ParseTas
 
 pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
     if let Ok((tcpstream, _)) = socket.0.accept() {
-        let stream = Stream::new(tcpstream);
-
         let mut entity = commands.spawn(Player {
-            event: ParseTask::new(stream.stream.clone()),
-            stream: stream.clone(),
+            event: ParseTask::new(Arc::new(tcpstream)),
             player_status: PlayerStatus(PacketState::Handshake),
         });
 

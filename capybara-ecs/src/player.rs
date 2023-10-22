@@ -1,7 +1,7 @@
 use bevy::prelude::{Bundle, Component};
 use capybara_packet::helper::PacketState;
 
-use crate::{parsing::ParseTask, server::Stream};
+use crate::parsing::ParseTask;
 
 #[derive(Debug, Component)]
 pub struct Name(String);
@@ -11,7 +11,6 @@ pub struct Uuid(uuid::Uuid);
 
 #[derive(Bundle)]
 pub struct Player {
-    pub stream: Stream,
     pub event: ParseTask,
     pub player_status: PlayerStatus,
 }
