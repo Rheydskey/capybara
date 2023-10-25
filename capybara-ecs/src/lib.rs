@@ -1,3 +1,4 @@
+mod config;
 mod event;
 mod logger;
 mod parsing;
@@ -8,9 +9,10 @@ use crate::logger::Log;
 
 use bevy::{
     app::{App, ScheduleRunnerPlugin},
-    prelude::{Component, TaskPoolPlugin},
+    prelude::TaskPoolPlugin,
 };
 
+use config::GlobalServerConfig;
 use server::ServerPlugin;
 use std::time::Duration;
 
@@ -25,8 +27,6 @@ pub fn init() {
             1. / 200.,
         )))
         .add_plugins(ServerPlugin)
+        .insert_resource(GlobalServerConfig::from_file_or_create("./config.toml"))
         .run();
 }
-
-#[derive(Debug, Component)]
-struct PacketName(String);
