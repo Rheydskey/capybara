@@ -8,7 +8,6 @@ use std::sync::Arc;
 use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
 
-use crate::config::GlobalServerConfig;
 use crate::event::{GlobalEventWriter, Handshake, PacketEventPlugin, PingRequest};
 use crate::parsing::ParseTask;
 use crate::player::{CompressionState, EncryptionState, Player, PlayerStatus, PlayerStatusMarker};

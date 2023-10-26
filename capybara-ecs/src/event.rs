@@ -7,14 +7,13 @@ use bevy::{
 };
 use capybara_packet::{
     types::RawPacket, EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket,
-    IntoResponse, Login as LoginPacket, LoginSuccessPacket, Packet,
-    PingRequest as PingRequestPacket, StatusPacket,
+    Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, StatusPacket,
 };
 
 use crate::{
     config::GlobalServerConfig,
     parsing::ParseTask,
-    player::{EncryptionLayer, EncryptionState, Name, PlayerStatusMarker, VerifyToken},
+    player::{EncryptionLayer, EncryptionState, PlayerStatusMarker, VerifyToken},
 };
 
 pub struct PacketEventPlugin;
@@ -85,18 +84,13 @@ pub fn ping_handler(
             continue;
         };
 
-        let respacket = Packet::new();
-
-        let rpacket = RawPacket::from_bytes(
-            &PingRequestPacket {
+        a.send_packet(
+            RawPacket::build_from_packet(PingRequestPacket {
                 value: packet.value,
-            }
-            .to_response(&respacket)
-            .unwrap(),
-            0x1,
-        );
-
-        a.send_packet(rpacket.data).unwrap()
+            })
+            .data,
+        )
+        .unwrap()
     }
 }
 
@@ -106,7 +100,6 @@ pub fn handshake_handler(
     mut handshakes: EventReader<Handshake>,
 ) {
     for Handshake(entity, handshake) in handshakes.iter() {
-        let packet = Packet::new();
         info!("{entity:?}");
         let Ok(p) = parse_task.get(*entity) else {
             continue;
@@ -119,8 +112,7 @@ pub fn handshake_handler(
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Status);
 
-            let rpacket =
-                RawPacket::from_bytes(&StatusPacket::default().to_response(&packet).unwrap(), 0x0);
+            let rpacket = RawPacket::build_from_packet(StatusPacket::default());
 
             p.send_packet(rpacket.data).unwrap();
         } else if next_state == 2 {
@@ -130,11 +122,8 @@ pub fn handshake_handler(
         } else {
             info!("Weird next_state > 2");
 
-            let rawpacket = RawPacket::from_bytes(
-                &capybara_packet::DisconnectPacket::from_reason("Unsupported next_state")
-                    .to_response(&packet)
-                    .unwrap(),
-                0x0,
+            let rawpacket = RawPacket::build_from_packet(
+                capybara_packet::DisconnectPacket::from_reason("Unsupported next_state"),
             );
 
             p.send_packet(rawpacket.data).unwrap();
@@ -168,8 +157,7 @@ pub fn login_handler(
         info!("{token:?}");
         entity_command.insert(VerifyToken(token));
 
-        let packet = Packet::new();
-        let rawpacket = RawPacket::from_bytes(&to_send.to_response(&packet).unwrap(), 0x1);
+        let rawpacket = RawPacket::build_from_packet(to_send);
 
         task.send_packet(rawpacket.data);
     }
@@ -211,16 +199,8 @@ pub fn response_encryption(
 
         command.entity(*entity).remove::<VerifyToken>();
 
-        let packet = Packet::new();
-
         e.send_packet(
-            RawPacket::from_bytes(
-                &LoginSuccessPacket::new(name.0.clone(), uuid.0)
-                    .to_response(&packet)
-                    .unwrap(),
-                0x02,
-            )
-            .data,
+            RawPacket::build_from_packet(LoginSuccessPacket::new(name.0.clone(), uuid.0)).data,
         )
         .unwrap();
     }

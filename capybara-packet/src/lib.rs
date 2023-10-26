@@ -9,6 +9,7 @@ use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPubl
 use std::{fmt::Debug, str::FromStr};
 use thiserror::Error;
 use types::{Chat, RawPacket, Text};
+use uuid::Uuid;
 
 use crate::helper::parse_packet;
 use helper::{PacketBool, PacketBytes, PacketEnum, PacketState, PacketString, PacketUUID};
@@ -97,6 +98,8 @@ pub enum PacketError {
 }
 
 pub trait IntoResponse {
+    fn id(&self) -> usize;
+
     fn to_response(self, packet: &Packet) -> anyhow::Result<Bytes>;
 }
 
@@ -109,6 +112,7 @@ pub trait PacketTrait {
 }
 
 #[derive(Debug, Clone, Default, packet)]
+#[id(0x00)]
 pub struct Handshake {
     #[varint]
     pub protocol: i32,
@@ -121,6 +125,7 @@ pub struct Handshake {
 }
 
 #[derive(Debug, Clone, packet)]
+#[id(0x00)]
 pub struct Login {
     #[string]
     pub name: String,
@@ -131,6 +136,7 @@ pub struct Login {
 }
 
 #[derive(Debug, Clone, packet)]
+#[id(0x01)]
 pub struct EncryptionRequest {
     #[string]
     pub server_id: String,
@@ -158,6 +164,7 @@ impl EncryptionRequest {
 }
 
 #[derive(packet, Debug, Clone)]
+#[id(0x01)]
 pub struct EncryptionResponse {
     #[arraybytes]
     sharedsecret: PacketBytes,
@@ -193,6 +200,7 @@ impl EncryptionResponse {
 }
 
 #[derive(packet)]
+#[id(0x02)]
 pub struct LoginSuccessPacket {
     #[uuid]
     uuid: uuid::Uuid,
@@ -203,16 +211,21 @@ pub struct LoginSuccessPacket {
 }
 
 impl LoginSuccessPacket {
-    pub fn new(username: String) -> Self {
+    pub fn new(username: String, uuid: Uuid) -> Self {
         Self {
-            uuid: uuid::Uuid::from_str("fb488a18-6b02-4b62-9c8f-4eb27e265851").unwrap(),
+            uuid,
             username,
             length_properties: 0,
         }
     }
+
+    pub fn new_uuid_str(username: String, uuid: &str) -> Self {
+        Self::new(username, uuid::Uuid::from_str(uuid).unwrap())
+    }
 }
 
 #[derive(Debug, packet)]
+#[id(0x00)]
 pub struct DisconnectPacket {
     #[string]
     reason: String,
@@ -227,6 +240,7 @@ impl DisconnectPacket {
 }
 
 #[derive(Debug, packet)]
+#[id(0x00)]
 pub struct StatusPacket {
     #[string]
     json_response: String,
@@ -265,6 +279,7 @@ impl Default for StatusPacket {
 }
 
 #[derive(packet, Clone, Debug)]
+#[id(0x01)]
 pub struct PingRequest {
     #[i64]
     pub value: i64,

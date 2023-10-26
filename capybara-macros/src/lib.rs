@@ -3,8 +3,8 @@ use proc_macro::TokenStream;
 use proc_macro2::{Delimiter, Group, Ident, Span};
 
 use syn::{
-    parse_macro_input, AngleBracketedGenericArguments, DeriveInput, GenericArgument, PathArguments,
-    Type,
+    parse_macro_input, AngleBracketedGenericArguments, DataStruct, DeriveInput, GenericArgument,
+    PathArguments, Type,
 };
 extern crate proc_macro;
 use quote::{quote, ToTokens, TokenStreamExt};
@@ -117,10 +117,28 @@ impl FromBytes {
 /// Panic when invalid data
 #[proc_macro_derive(
     packet,
-    attributes(varint, varlong, arraybytes, string, u8, u16, bool, uuid, i64)
+    attributes(varint, varlong, arraybytes, string, u8, u16, bool, uuid, i64, id)
 )]
 pub fn derive_packet(item: TokenStream) -> TokenStream {
-    let DeriveInput { ident, data, .. } = parse_macro_input!(item);
+    let DeriveInput {
+        ident, data, attrs, ..
+    } = parse_macro_input!(item);
+
+    let ids = attrs
+        .iter()
+        .map(|e| e.parse_args::<proc_macro2::TokenStream>().unwrap())
+        .filter_map(|token| token.into_iter().last())
+        .map(|f| {
+            let proc_macro2::TokenTree::Literal(l) = f else {
+                return None;
+            };
+
+            Some(l.to_string())
+        })
+        .flatten()
+        .collect::<Vec<String>>();
+
+    let id = syn::LitInt::new(ids.first().unwrap(), Span::call_site());
 
     let gentype_contains_type = |barket: &AngleBracketedGenericArguments| -> bool {
         for i in &barket.args {
@@ -150,12 +168,11 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
             .collect::<Vec<String>>()
     };
 
-    let syn::Data::Struct(ds) = data else {
+    let syn::Data::Struct(DataStruct { fields, .. }) = data else {
         unimplemented!("Derive macro work only on struct")
     };
 
-    let methods: Vec<Field> = ds
-        .fields
+    let methods: Vec<Field> = fields
         .into_iter()
         .filter_map(|f| {
             let field_name = f.ident.unwrap().to_string();
@@ -195,6 +212,7 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
             })
         })
         .collect::<Vec<Field>>();
+
     let to_res: Vec<IntoResponse> = methods.iter().map(|f| IntoResponse(f.clone())).collect();
     let from_bytes: SelfFromBytes =
         SelfFromBytes(methods.iter().map(|f| FromBytes(f.clone())).collect());
@@ -202,6 +220,10 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
     let output = quote! {
         #[automatically_derived]
         impl IntoResponse for #ident {
+            fn id(&self) -> usize {
+                return #id;
+            }
+
             fn to_response(self, packet: &Packet) -> ::anyhow::Result<Bytes> {
                 let mut bytes = ::bytes::BytesMut::new();
                 #(#to_res;)*

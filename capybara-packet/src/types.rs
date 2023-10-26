@@ -84,6 +84,15 @@ impl RawPacket {
 
         Ok(packet)
     }
+
+    pub fn build_from_packet(to_send_packet: impl IntoResponse) -> Self {
+        let packet = Packet::new();
+        let id = to_send_packet.id();
+        Self::from_bytes(
+            &to_send_packet.to_response(&packet).unwrap(),
+            i32::try_from(id).unwrap(),
+        )
+    }
 }
 
 #[derive(Debug)]
