@@ -6,7 +6,7 @@ use bevy::{
     },
 };
 use capybara_packet::{
-    types::RawPacket, EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket,
+    DisconnectPacket, EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket,
     Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, StatusPacket,
 };
 
@@ -84,12 +84,9 @@ pub fn ping_handler(
             continue;
         };
 
-        a.send_packet(
-            RawPacket::build_from_packet(PingRequestPacket {
-                value: packet.value,
-            })
-            .data,
-        )
+        a.send_packet(PingRequestPacket {
+            value: packet.value,
+        })
         .unwrap()
     }
 }
@@ -112,9 +109,7 @@ pub fn handshake_handler(
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Status);
 
-            let rpacket = RawPacket::build_from_packet(StatusPacket::default());
-
-            p.send_packet(rpacket.data).unwrap();
+            p.send_packet(StatusPacket::default()).unwrap();
         } else if next_state == 2 {
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Login);
@@ -122,11 +117,10 @@ pub fn handshake_handler(
         } else {
             info!("Weird next_state > 2");
 
-            let rawpacket = RawPacket::build_from_packet(
-                capybara_packet::DisconnectPacket::from_reason("Unsupported next_state"),
-            );
-
-            p.send_packet(rawpacket.data).unwrap();
+            p.send_packet(capybara_packet::DisconnectPacket::from_reason(
+                "Unsupported next_state",
+            ))
+            .unwrap();
         }
     }
 }
@@ -145,6 +139,13 @@ pub fn login_handler(
         };
 
         let mut entity_command = command.entity(*entity);
+
+        if !login.has_uuid {
+            task.send_packet(DisconnectPacket::from_reason("Be online player plzz"))
+                .unwrap();
+            continue;
+        }
+
         entity_command.insert(crate::player::Uuid(login.uuid));
         entity_command.insert(crate::player::Name(login.name.clone()));
 
@@ -157,9 +158,7 @@ pub fn login_handler(
         info!("{token:?}");
         entity_command.insert(VerifyToken(token));
 
-        let rawpacket = RawPacket::build_from_packet(to_send);
-
-        task.send_packet(rawpacket.data);
+        task.send_packet(to_send);
     }
 }
 
@@ -199,9 +198,7 @@ pub fn response_encryption(
 
         command.entity(*entity).remove::<VerifyToken>();
 
-        e.send_packet(
-            RawPacket::build_from_packet(LoginSuccessPacket::new(name.0.clone(), uuid.0)).data,
-        )
-        .unwrap();
+        e.send_packet(LoginSuccessPacket::new(name.0.clone(), uuid.0))
+            .unwrap();
     }
 }

@@ -4,7 +4,10 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task},
 };
 use bytes::{BufMut, Bytes, BytesMut};
-use capybara_packet::types::{RawPacket, VarInt};
+use capybara_packet::{
+    types::{RawPacket, VarInt},
+    IntoResponse,
+};
 use std::{io::Read, net::TcpStream};
 use std::{io::Write, sync::Arc};
 
@@ -70,8 +73,15 @@ impl ParseTask {
         )
     }
 
-    pub fn send_packet(&self, packet: Bytes) -> anyhow::Result<()> {
-        self.0.send(packet)?;
+    pub fn send_bytes(&self, bytes: Bytes) -> anyhow::Result<()> {
+        self.0.send(bytes)?;
+
+        Ok(())
+    }
+
+    pub fn send_packet(&self, packet: impl IntoResponse) -> anyhow::Result<()> {
+        let rawpacket = RawPacket::build_from_packet(packet);
+        self.0.send(rawpacket.data)?;
 
         Ok(())
     }
