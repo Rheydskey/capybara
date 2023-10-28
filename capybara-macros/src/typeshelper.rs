@@ -6,13 +6,6 @@ use crate::Field;
 pub struct VarInt;
 
 impl VarInt {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(VarInt::new().read_from_cursor(&mut bytes)?),
-        )
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = proc_macro2::Ident::new(&field.ident, Span::call_site());
         Self::encode_group(&Group::new(Delimiter::None, quote!(self.#ident)))
@@ -31,27 +24,20 @@ impl VarInt {
 pub struct ArrayBytes;
 
 impl ArrayBytes {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(PacketBytes::from_cursor(&mut bytes)?),
-        )
-    }
-
     pub fn encode(field: &Field) -> (Group, Group) {
         let ident = proc_macro2::Ident::new(&field.ident, Span::call_site());
 
         let lenght = VarInt::encode_group(&Group::new(
             Delimiter::None,
             quote!(
-                self.#ident.0.len()
+                self.#ident.len()
             ),
         ));
 
         let bytes = Group::new(
             Delimiter::None,
             quote!(
-                self.#ident.0
+                self.#ident
             ),
         );
 
@@ -62,13 +48,6 @@ impl ArrayBytes {
 pub struct StringHelper;
 
 impl StringHelper {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(PacketString::from_cursor(&mut bytes)?.to_string()),
-        )
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(
@@ -81,13 +60,6 @@ impl StringHelper {
 pub struct VarLong;
 
 impl VarLong {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(VarLong::new().read_from_iter(&mut bytes)?),
-        )
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = proc_macro2::Ident::new(&field.ident, Span::call_site());
         Self::encode_group(&Group::new(Delimiter::None, quote!(self.#ident)))
@@ -106,10 +78,6 @@ impl VarLong {
 pub struct U8helper;
 
 impl U8helper {
-    pub fn decode() -> Group {
-        Group::new(Delimiter::None, quote!(bytes.get_u8()))
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(Delimiter::None, quote!(self.#ident))
@@ -119,13 +87,6 @@ impl U8helper {
 pub struct U16helper;
 
 impl U16helper {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(((u16::from(bytes.get_u8())) << 8) | u16::from(bytes.get_u8())),
-        )
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(Delimiter::None, quote!(self.#ident.to_be_bytes()))
@@ -135,13 +96,6 @@ impl U16helper {
 pub struct BoolHelper;
 
 impl BoolHelper {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(*PacketBool::from_cursor(&mut bytes)),
-        )
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(Delimiter::None, quote!(u8::from(self.#ident)))
@@ -151,13 +105,6 @@ impl BoolHelper {
 pub struct UuidHelper;
 
 impl UuidHelper {
-    pub fn decode() -> Group {
-        Group::new(
-            Delimiter::None,
-            quote!(PacketUUID::from_cursor(&mut bytes).to_uuid()),
-        )
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(Delimiter::None, quote!(self.#ident.to_u128_le()))
@@ -167,10 +114,6 @@ impl UuidHelper {
 pub struct I64Helper;
 
 impl I64Helper {
-    pub fn decode() -> Group {
-        Group::new(Delimiter::None, quote!(bytes.get_i64()))
-    }
-
     pub fn encode(field: &Field) -> Group {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(Delimiter::None, quote!(self.#ident))

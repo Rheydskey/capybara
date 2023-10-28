@@ -69,22 +69,86 @@ impl IntoResponse {
     }
 }
 
-struct SelfFromBytes(Vec<FromBytes>);
+struct TupleFieldName;
+
+impl TupleFieldName {
+    pub fn to_tuple(capyfield: &CapyField) -> Group {
+        let fields = capyfield
+            .0
+            .iter()
+            .map(|f| Ident::new(&f.ident, Span::call_site()))
+            .collect::<Vec<_>>();
+
+        Group::new(Delimiter::None, quote!(#(#fields),* ))
+    }
+}
+
+fn set_parser(name: &str) -> Group {
+    let group = match name {
+        "arraybytes" => quote!(::nom_mcpacket::PacketBytes::parse),
+        "varint" => quote!(::nom_mcpacket::VarInt::parse),
+        "varlong" => todo!(),
+        "string" => quote!(::nom_mcpacket::PacketString::parse),
+        "u8" => quote!(::nom_mcpacket::read_u8),
+        "u16" => quote!(::nom_mcpacket::read_u16),
+        "bool" => quote!(::nom_mcpacket::PacketBool::parse),
+        "uuid" => quote!(::nom_mcpacket::PacketUuid::parse),
+        "i64" => quote!(::nom_mcpacket::read_i64),
+        _ => unimplemented!("{}", name),
+    };
+
+    Group::new(Delimiter::None, quote!(#group))
+}
+
+struct TupleParserName;
+
+impl TupleParserName {
+    pub fn to_tuple(capyfield: &CapyField) -> Group {
+        let parsers = capyfield
+            .0
+            .iter()
+            .map(|f| f.attribute_type.as_str())
+            .map(set_parser)
+            .collect::<Vec<_>>();
+
+        if parsers.len() == 1 {
+            let parser = parsers[0].clone();
+            return Group::new(Delimiter::None, quote!(#parser(bytes)));
+        }
+
+        Group::new(
+            Delimiter::None,
+            quote!(::nom::sequence::tuple((#(#parsers),*))(bytes)),
+        )
+    }
+}
+
+struct SelfFromBytes(CapyField, Vec<FromBytes>);
 
 impl SelfFromBytes {
     pub fn new(fields: &CapyField) -> Self {
-        Self(fields.0.iter().map(|f| FromBytes(f.clone())).collect())
+        Self(
+            fields.clone(),
+            fields.0.iter().map(|f| FromBytes(f.clone())).collect(),
+        )
     }
 }
 
 impl ToTokens for SelfFromBytes {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let frombytes = &self.0;
+        let frombytes = &self.1;
+        let tuple = TupleFieldName::to_tuple(&self.0);
+        let parsers = TupleParserName::to_tuple(&self.0);
+
         tokens.append(Group::new(
             Delimiter::None,
-            quote!(Ok(Self {
-                #(#frombytes)*
-            })),
+            quote!(
+                let (remain, (#tuple)) = #parsers.unwrap();
+
+                Ok(Self {
+                    #(#frombytes)*
+                })
+            ),
         ));
     }
 }
@@ -100,22 +164,9 @@ impl ToTokens for FromBytes {
 
 impl FromBytes {
     pub fn to_frombytes(&self) -> Group {
-        let group = match self.0.attribute_type.as_str() {
-            "arraybytes" => ArrayBytes::decode(),
-            "varint" => VarInt::decode(),
-            "varlong" => VarLong::decode(),
-            "string" => StringHelper::decode(),
-            "u8" => U8helper::decode(),
-            "u16" => U16helper::decode(),
-            "bool" => BoolHelper::decode(),
-            "uuid" => UuidHelper::decode(),
-            "i64" => I64Helper::decode(),
-            _ => unimplemented!("{}", self.0.attribute_type.as_str()),
-        };
-
         let ident = Ident::new(&self.0.ident, Span::call_site());
 
-        Group::new(Delimiter::None, quote!(#ident: #group,))
+        Group::new(Delimiter::None, quote!(#ident,))
     }
 }
 
@@ -156,6 +207,7 @@ impl ToTokens for Id {
     }
 }
 
+#[derive(Clone)]
 struct CapyField(Vec<Field>);
 
 impl CapyField {
@@ -291,18 +343,14 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
 
             fn to_response(self, packet: &Packet) -> ::anyhow::Result<Bytes> {
                 let mut bytes = ::bytes::BytesMut::new();
-
                 #to_res
-
                 Ok(bytes.freeze())
             }
         }
 
         #[automatically_derived]
         impl crate::PacketTrait for #ident {
-            fn from_bytes(bytes: &::bytes::Bytes) -> ::anyhow::Result<Self> {
-                let mut bytes = ::std::io::Cursor::new(&bytes[..]);
-
+            fn from_bytes(bytes: &[u8]) -> ::anyhow::Result<Self> {
                 #from_bytes
             }
         }

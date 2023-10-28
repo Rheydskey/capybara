@@ -7,8 +7,9 @@ edition = "2021"
 
 [dependencies]
 capybara-macros= {path = "../capybara-macros"}
+nom-mcpacket = {path = "../nom-mcpacket"}
 
-
+nom = "7.1"
 serde = {version = "1", features = ["derive"]}
 serde_json = {version = "1"}
 bytes = "1.5.0"

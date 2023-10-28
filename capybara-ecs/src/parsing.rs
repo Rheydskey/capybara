@@ -215,7 +215,6 @@ impl Reader {
                 if self.packet.1.len() == lenght {
                     if let Ok(rawpacket) = self.try_parse_packet() {
                         self.new_packet.send(rawpacket).unwrap();
-                        info!("New packet sended");
                     } else {
                         return Err(anyhow!(""));
                     }

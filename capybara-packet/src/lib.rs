@@ -1,8 +1,11 @@
 pub mod helper;
+
+#[cfg(test)]
+pub mod tests;
 pub mod types;
 
 use anyhow::anyhow;
-use bytes::{Buf, BufMut, Bytes};
+use bytes::{BufMut, Bytes};
 use capybara_macros::packet;
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
@@ -12,7 +15,7 @@ use types::{Chat, RawPacket, Text};
 use uuid::Uuid;
 
 use crate::helper::parse_packet;
-use helper::{PacketBool, PacketBytes, PacketEnum, PacketState, PacketString, PacketUUID};
+use helper::{PacketBytes, PacketEnum, PacketState, PacketString};
 
 use crate::types::VarInt;
 
@@ -106,7 +109,7 @@ pub trait IntoResponse {
 pub trait PacketTrait {
     /// # Errors
     /// Return if error if cannot parse packet
-    fn from_bytes(bytes: &Bytes) -> anyhow::Result<Self>
+    fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self>
     where
         Self: Sized;
 }
@@ -141,9 +144,9 @@ pub struct EncryptionRequest {
     #[string]
     pub server_id: String,
     #[arraybytes]
-    pub publickey: PacketBytes,
+    pub publickey: Vec<u8>,
     #[arraybytes]
-    pub verify_token: PacketBytes,
+    pub verify_token: Vec<u8>,
 }
 
 impl EncryptionRequest {
@@ -157,8 +160,8 @@ impl EncryptionRequest {
         info!("token: {token:?}");
         Ok(Self {
             server_id: String::new(),
-            publickey: PacketBytes(key),
-            verify_token: PacketBytes(token.to_vec()),
+            publickey: key,
+            verify_token: token.to_vec(),
         })
     }
 }
@@ -167,14 +170,14 @@ impl EncryptionRequest {
 #[id(0x01)]
 pub struct EncryptionResponse {
     #[arraybytes]
-    sharedsecret: PacketBytes,
+    sharedsecret: Vec<u8>,
     #[arraybytes]
-    verify_token: PacketBytes,
+    verify_token: Vec<u8>,
 }
 
 impl EncryptionResponse {
     pub fn decrypt_verify_token(&self, rsa: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
-        rsa.decrypt(Pkcs1v15Encrypt, &self.verify_token.0)
+        rsa.decrypt(Pkcs1v15Encrypt, &self.verify_token)
     }
 
     /// # Errors
@@ -185,17 +188,17 @@ impl EncryptionResponse {
 
     #[must_use]
     pub const fn get_shared_secret(&self) -> &Vec<u8> {
-        &self.sharedsecret.0
+        &self.sharedsecret
     }
 
     #[must_use]
     pub fn get_shared_secret_lenght(&self) -> usize {
-        self.sharedsecret.0.len()
+        self.sharedsecret.len()
     }
 
     #[must_use]
     pub fn get_verify_token_lenght(&self) -> usize {
-        self.verify_token.0.len()
+        self.verify_token.len()
     }
 }
 

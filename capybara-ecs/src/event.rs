@@ -154,7 +154,7 @@ pub fn login_handler(
         )
         .unwrap();
 
-        let token = to_send.verify_token.0.clone();
+        let token = to_send.verify_token.clone();
         info!("{token:?}");
         entity_command.insert(VerifyToken(token));
 
