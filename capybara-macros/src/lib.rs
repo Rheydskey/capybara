@@ -307,7 +307,7 @@ impl ToTokens for IntoResponses {
             quote!(
                     #(#to_res;)*
             ),
-        ))
+        ));
     }
 }
 

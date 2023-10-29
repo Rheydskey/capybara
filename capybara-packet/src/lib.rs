@@ -1,3 +1,5 @@
+pub use nom_mcpacket;
+
 pub mod helper;
 
 #[cfg(test)]
@@ -7,6 +9,7 @@ pub mod types;
 use anyhow::anyhow;
 use bytes::{BufMut, Bytes};
 use capybara_macros::packet;
+use nom_mcpacket::VarInt;
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
 use std::{fmt::Debug, str::FromStr};
@@ -15,9 +18,7 @@ use types::{Chat, RawPacket, Text};
 use uuid::Uuid;
 
 use crate::helper::parse_packet;
-use helper::{PacketBytes, PacketEnum, PacketState, PacketString};
-
-use crate::types::VarInt;
+use helper::{PacketEnum, PacketState};
 
 #[macro_use]
 extern crate log;

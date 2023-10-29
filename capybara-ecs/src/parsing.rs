@@ -4,10 +4,7 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task},
 };
 use bytes::{BufMut, Bytes, BytesMut};
-use capybara_packet::{
-    types::{RawPacket, VarInt},
-    IntoResponse,
-};
+use capybara_packet::{nom_mcpacket::VarInt, types::RawPacket, IntoResponse};
 use std::{io::Read, net::TcpStream};
 use std::{io::Write, sync::Arc};
 
@@ -71,12 +68,6 @@ impl ParseTask {
             send_task,
             shared_state,
         )
-    }
-
-    pub fn send_bytes(&self, bytes: Bytes) -> anyhow::Result<()> {
-        self.0.send(bytes)?;
-
-        Ok(())
     }
 
     pub fn send_packet(&self, packet: impl IntoResponse) -> anyhow::Result<()> {
@@ -168,13 +159,14 @@ impl Reader {
     }
 
     pub fn read_varint(&mut self) -> anyhow::Result<i32> {
-        let mut varint = VarInt::new();
-
+        let mut buf = Vec::new();
         while let Ok(byte) = self.read_u8() {
             info!("{:?}", self.packet);
-            let value = varint.try_with(byte)?;
-
-            if let Some(value) = value {
+            buf.push(byte);
+            if let Ok((remain, value)) = VarInt::parse(buf.as_slice()) {
+                if !remain.is_empty() {
+                    warn!("Remaining bytes weird");
+                }
                 return Ok(value);
             }
         }

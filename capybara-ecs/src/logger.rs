@@ -1,7 +1,6 @@
 use std::time::SystemTime;
 
 use bevy::prelude::Plugin;
-pub use log::{Level, LevelFilter};
 
 pub struct Log;
 impl Plugin for Log {

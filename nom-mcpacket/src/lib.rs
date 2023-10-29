@@ -92,6 +92,15 @@ impl PacketString {
 
         Ok((input, string.to_string()))
     }
+
+    pub fn encode(string: String) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        bytes.append(&mut VarInt::encode(i32::try_from(string.len()).unwrap()));
+        bytes.extend_from_slice(string.as_bytes());
+
+        bytes
+    }
 }
 
 pub struct PacketBool(bool);

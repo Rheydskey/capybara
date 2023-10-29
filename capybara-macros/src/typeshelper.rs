@@ -52,7 +52,7 @@ impl StringHelper {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(
             Delimiter::None,
-            quote!(PacketString::to_bytes(self.#ident.as_str())?),
+            quote!(::nom_mcpacket::PacketString::encode(self.#ident)),
         )
     }
 }
