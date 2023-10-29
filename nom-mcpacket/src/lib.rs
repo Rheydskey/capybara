@@ -79,7 +79,9 @@ impl PacketString {
 
         let transform_to_string = std::str::from_utf8;
         println!("{value:?}");
-        let (input, value) = take_bytes(input).unwrap();
+        let Ok((input, value)) = take_bytes(input) else {
+            return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+        };
 
         Ok((input, transform_to_string(value).unwrap().to_string()))
     }
@@ -103,26 +105,35 @@ impl PacketBytes {
         let take_bytes =
             nom::bytes::complete::take::<usize, &[u8], ()>(value.unsigned_abs() as usize);
 
-        let (input, value) = take_bytes(input).unwrap();
+        let Ok((input, value)) = take_bytes(input) else {
+            return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+        };
 
         Ok((input, value.to_vec()))
     }
 }
 
 pub fn read_u8(bytes: &[u8]) -> IResult<&[u8], u8> {
-    let (remain, bytes) = take::<usize, &[u8], ()>(1)(bytes).unwrap();
+    let Ok((remain, bytes)) = take::<usize, &[u8], ()>(1)(bytes) else {
+        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+    };
 
     Ok((remain, bytes[0]))
 }
 
 pub fn read_u16(bytes: &[u8]) -> IResult<&[u8], u16> {
-    let (remain, bytes) = take::<usize, &[u8], ()>(2)(bytes).unwrap();
+    let Ok((remain, bytes)) = take::<usize, &[u8], ()>(2)(bytes) else {
+        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+    };
 
     Ok((remain, (u16::from(bytes[0]) << 8) | u16::from(bytes[1])))
 }
 
 pub fn read_i64(bytes: &[u8]) -> IResult<&[u8], i64> {
-    let (remain, bytes) = take::<usize, &[u8], ()>(8)(bytes).unwrap();
-    let value = i64::from_be_bytes(bytes[0..=8].try_into().unwrap());
+    let Ok((remain, bytes)) = take::<usize, &[u8], ()>(8)(bytes) else {
+        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+    };
+
+    let value = i64::from_be_bytes(bytes.try_into().unwrap());
     Ok((remain, value))
 }
