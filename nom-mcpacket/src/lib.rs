@@ -78,12 +78,19 @@ impl PacketString {
             nom::bytes::complete::take::<usize, &[u8], ()>(value.unsigned_abs() as usize);
 
         let transform_to_string = std::str::from_utf8;
-        println!("{value:?}");
+
         let Ok((input, value)) = take_bytes(input) else {
             return Err(nom::Err::Incomplete(nom::Needed::Unknown));
         };
 
-        Ok((input, transform_to_string(value).unwrap().to_string()))
+        let Ok(string) = transform_to_string(value) else {
+            return Err(nom::Err::Failure(nom::error::Error {
+                input: value,
+                code: nom::error::ErrorKind::Fail,
+            }));
+        };
+
+        Ok((input, string.to_string()))
     }
 }
 
@@ -91,7 +98,9 @@ pub struct PacketBool(bool);
 
 impl PacketBool {
     pub fn parse(bytes: &[u8]) -> IResult<&[u8], bool> {
-        let (remain, bytes) = nom::bytes::complete::take::<usize, &[u8], ()>(1)(bytes).unwrap();
+        let Ok((remain, bytes)) = nom::bytes::complete::take::<usize, &[u8], ()>(1)(bytes) else {
+            return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+        };
 
         Ok((remain, bytes[0] == 0x01))
     }
@@ -134,6 +143,12 @@ pub fn read_i64(bytes: &[u8]) -> IResult<&[u8], i64> {
         return Err(nom::Err::Incomplete(nom::Needed::Unknown));
     };
 
-    let value = i64::from_be_bytes(bytes.try_into().unwrap());
-    Ok((remain, value))
+    let Ok(bytes_into) = bytes.try_into() else {
+        return Err(nom::Err::Failure(nom::error::Error {
+            input: bytes,
+            code: nom::error::ErrorKind::Fail,
+        }));
+    };
+
+    Ok((remain, i64::from_be_bytes(bytes_into)))
 }
