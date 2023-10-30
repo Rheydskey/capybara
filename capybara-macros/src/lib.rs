@@ -181,14 +181,13 @@ impl Id {
             .iter()
             .map(|e| e.parse_args::<proc_macro2::TokenStream>().unwrap())
             .filter_map(|token| token.into_iter().last())
-            .map(|f| {
+            .filter_map(|f| {
                 let proc_macro2::TokenTree::Literal(l) = f else {
                     return None;
                 };
 
                 Some(l.to_string())
             })
-            .flatten()
             .collect::<Vec<String>>();
 
         let Some(id) = ids.first().cloned() else {
@@ -275,7 +274,7 @@ impl CapyField {
 
                 Some(Field {
                     ident: field_name,
-                    field_type: fieldtype,
+                    ftype: fieldtype,
                     attribute_type: attribute_name,
                 })
             })

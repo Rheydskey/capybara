@@ -34,11 +34,11 @@ impl RawPacket {
     pub fn from_bytes(bytes: &Bytes, packetid: i32) -> Self {
         let mut bytespacketid = BytesMut::new();
 
-        bytespacketid.put_slice(&VarInt::encode(packetid));
+        bytespacketid.put_slice(&VarInt::encode(packetid).unwrap());
 
         let lenght = i32::try_from(bytespacketid.len() + bytes.len()).unwrap();
 
-        let byteslenght = VarInt::encode(lenght);
+        let byteslenght = VarInt::encode(lenght).unwrap();
 
         Self {
             lenght,

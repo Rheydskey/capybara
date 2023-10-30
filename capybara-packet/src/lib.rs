@@ -58,7 +58,7 @@ impl Packet {
     pub fn write(&mut self, packetenum: PacketEnum) -> anyhow::Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        buf.append(&mut VarInt::encode(self.packetid));
+        buf.append(&mut VarInt::encode(self.packetid)?);
         match packetenum {
             PacketEnum::None => Ok(()),
             PacketEnum::HandShake(Handshake {
@@ -67,7 +67,7 @@ impl Packet {
                 port,
                 next_state,
             }) => {
-                buf.append(&mut VarInt::encode(protocol));
+                buf.append(&mut VarInt::encode(protocol)?);
                 buf.append(&mut address.as_bytes().to_vec());
                 buf.append(&mut port.to_be_bytes().to_vec());
                 buf.push(next_state);
@@ -79,7 +79,7 @@ impl Packet {
                 has_uuid,
                 uuid,
             }) => {
-                buf.append(&mut VarInt::encode(i32::try_from(name.len())?));
+                buf.append(&mut VarInt::encode(i32::try_from(name.len())?)?);
                 buf.append(&mut name.as_bytes().to_vec());
                 buf.push(u8::from(has_uuid));
                 buf.append(&mut uuid.to_u128_le().swap_bytes().to_be_bytes().to_vec());

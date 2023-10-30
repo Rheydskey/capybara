@@ -7,6 +7,6 @@ pub enum FType {
 #[derive(Debug, Clone)]
 pub struct Field {
     pub ident: String,
-    pub field_type: FType,
+    pub ftype: FType,
     pub attribute_type: String,
 }

@@ -36,7 +36,7 @@ impl VarInt {
                 Err(_) => return Err(nom::Err::Incomplete(nom::Needed::Unknown)),
             };
 
-            result |= (byte as i32 & Self::SEGMENT_BITS) << position;
+            result |= (i32::from(byte) & Self::SEGMENT_BITS) << position;
 
             position += 7;
 
@@ -47,21 +47,23 @@ impl VarInt {
                 }));
             }
 
-            if (byte as i32 & Self::CONTINUE_BIT) == 0 {
+            if (i32::from(byte) & Self::CONTINUE_BIT) == 0 {
                 return Ok((remainder, result));
             }
         }
     }
 
-    pub fn encode(mut value: i32) -> Vec<u8> {
+    pub fn encode(mut value: i32) -> anyhow::Result<Vec<u8>> {
         let mut buf: Vec<u8> = Vec::new();
         loop {
             if (value & !Self::SEGMENT_BITS) == 0 {
-                buf.push(value as u8);
-                return buf;
+                buf.push(u8::try_from(value)?);
+                return Ok(buf);
             }
 
-            buf.push(((value & Self::SEGMENT_BITS) | Self::CONTINUE_BIT) as u8);
+            buf.push(u8::try_from(
+                (value & Self::SEGMENT_BITS) | Self::CONTINUE_BIT,
+            )?);
 
             value >>= 7;
         }
@@ -93,13 +95,13 @@ impl PacketString {
         Ok((input, string.to_string()))
     }
 
-    pub fn encode(string: String) -> Vec<u8> {
+    pub fn encode(string: &str) -> anyhow::Result<Vec<u8>> {
         let mut bytes = Vec::new();
 
-        bytes.append(&mut VarInt::encode(i32::try_from(string.len()).unwrap()));
+        bytes.append(&mut VarInt::encode(i32::try_from(string.len())?)?);
         bytes.extend_from_slice(string.as_bytes());
 
-        bytes
+        Ok(bytes)
     }
 }
 

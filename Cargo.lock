@@ -1741,6 +1741,7 @@ dependencies = [
 name = "nom-mcpacket"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "nom",
  "uuid",
 ]

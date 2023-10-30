@@ -15,7 +15,7 @@ impl VarInt {
         Group::new(
             Delimiter::None,
             quote!(
-                VarInt::encode(i32::try_from(#group)?)
+                VarInt::encode(i32::try_from(#group)?)?
             ),
         )
     }
@@ -52,7 +52,7 @@ impl StringHelper {
         let ident = Ident::new(&field.ident, Span::call_site());
         Group::new(
             Delimiter::None,
-            quote!(::nom_mcpacket::PacketString::encode(self.#ident)),
+            quote!(::nom_mcpacket::PacketString::encode(&self.#ident)?),
         )
     }
 }
