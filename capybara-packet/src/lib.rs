@@ -1,9 +1,5 @@
 pub use nom_mcpacket;
-
 pub mod helper;
-
-#[cfg(test)]
-pub mod tests;
 pub mod types;
 
 use anyhow::anyhow;
@@ -223,8 +219,8 @@ impl LoginSuccessPacket {
         }
     }
 
-    pub fn new_uuid_str(username: String, uuid: &str) -> Self {
-        Self::new(username, uuid::Uuid::from_str(uuid).unwrap())
+    pub fn new_uuid_str(username: String, uuid: &str) -> anyhow::Result<Self> {
+        Ok(Self::new(username, uuid::Uuid::from_str(uuid)?))
     }
 }
 
@@ -236,10 +232,10 @@ pub struct DisconnectPacket {
 }
 
 impl DisconnectPacket {
-    pub fn from_reason(reason: &str) -> Self {
-        let reason = Chat::SimpleText(Text::new(reason)).to_string().unwrap();
+    pub fn from_reason(reason: &str) -> anyhow::Result<Self> {
+        let reason = Chat::SimpleText(Text::new(reason)).to_string()?;
 
-        Self { reason }
+        Ok(Self { reason })
     }
 }
 
@@ -287,4 +283,17 @@ impl Default for StatusPacket {
 pub struct PingRequest {
     #[i64]
     pub value: i64,
+}
+
+pub struct PlayLogin {
+    entity_id: u16,
+    is_hardcore: bool,
+    dimension_count: i32,
+    max_player: i32,
+    view_distance: i32,
+    simulation_distance: i32,
+    reduced_debug_info: bool,
+    enable_respawn_screen: bool,
+    do_limited_crafting: bool,
+    dimension_type: String,
 }

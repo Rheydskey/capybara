@@ -84,10 +84,11 @@ pub fn ping_handler(
             continue;
         };
 
-        a.send_packet(PingRequestPacket {
+        if let Err(error) = a.send_packet(PingRequestPacket {
             value: packet.value,
-        })
-        .unwrap()
+        }) {
+            error!("{error}");
+        }
     }
 }
 
@@ -109,18 +110,25 @@ pub fn handshake_handler(
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Status);
 
-            p.send_packet(StatusPacket::default()).unwrap();
+            if let Err(error) = p.send_packet(StatusPacket::default()) {
+                error!("{error}");
+            }
         } else if next_state == 2 {
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Login);
             info!("{entity:?} is now in logging state");
         } else {
             info!("Weird next_state > 2");
+            let Ok(packet) =
+                capybara_packet::DisconnectPacket::from_reason("Unsupported next_state")
+            else {
+                error!("Cannot serialize DisconnectPacket : {:?}", entity);
+                continue;
+            };
 
-            p.send_packet(capybara_packet::DisconnectPacket::from_reason(
-                "Unsupported next_state",
-            ))
-            .unwrap();
+            if let Err(error) = p.send_packet(packet) {
+                info!("{error:?}");
+            }
         }
     }
 }
@@ -141,24 +149,35 @@ pub fn login_handler(
         let mut entity_command = command.entity(*entity);
 
         if !login.has_uuid {
-            task.send_packet(DisconnectPacket::from_reason("Be online player plzz"))
-                .unwrap();
+            let Ok(packet) = DisconnectPacket::from_reason("Be online player plzz") else {
+                info!("Cannot serialize");
+                continue;
+            };
+
+            if let Err(error) = task.send_packet(packet) {
+                error!("Cannot send the packet: {:?}", error);
+            }
+
             continue;
         }
 
         entity_command.insert(crate::player::Uuid(login.uuid));
         entity_command.insert(crate::player::Name(login.name.clone()));
 
-        let to_send = capybara_packet::EncryptionRequest::new(
+        let Ok(to_send) = capybara_packet::EncryptionRequest::new(
             &rsa.network_config.get_privkey().to_public_key(),
-        )
-        .unwrap();
+        ) else {
+            error!("Cannot create encryption request");
+            continue;
+        };
 
         let token = to_send.verify_token.clone();
         info!("{token:?}");
         entity_command.insert(VerifyToken(token));
 
-        task.send_packet(to_send);
+        if let Err(error) = task.send_packet(to_send) {
+            error!("{error}");
+        }
     }
 }
 
@@ -198,7 +217,8 @@ pub fn response_encryption(
 
         command.entity(*entity).remove::<VerifyToken>();
 
-        e.send_packet(LoginSuccessPacket::new(name.0.clone(), uuid.0))
-            .unwrap();
+        if let Err(error) = e.send_packet(LoginSuccessPacket::new(name.0.clone(), uuid.0)) {
+            error!("Cannot send packet for {:?} : {}", entity, error);
+        }
     }
 }

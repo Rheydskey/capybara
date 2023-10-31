@@ -17,58 +17,66 @@ impl PacketUuid {
     }
 }
 
-pub struct VarInt(i32);
+#[macro_export]
+macro_rules! create_var_number {
+    ($n:tt, $t:ty, $max_pos:expr) => {
+        pub struct $n;
 
-impl VarInt {
-    const SEGMENT_BITS: i32 = 0x7F;
-    const CONTINUE_BIT: i32 = 0x80;
+        impl $n {
+            const SEGMENT_BITS: $t = 0x7F;
+            const CONTINUE_BIT: $t = 0x80;
 
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], i32> {
-        let mut remainder = bytes;
-        let mut result = 0;
-        let mut position = 0;
-        loop {
-            let byte = match nom::bytes::complete::take::<usize, &[u8], ()>(1)(remainder) {
-                Ok((remain, bytes)) => {
-                    remainder = remain;
-                    bytes[0]
+            pub fn parse(bytes: &[u8]) -> IResult<&[u8], $t> {
+                let mut remainder = bytes;
+                let mut result = 0;
+                let mut position = 0;
+                loop {
+                    let byte = match nom::bytes::complete::take::<usize, &[u8], ()>(1)(remainder) {
+                        Ok((remain, bytes)) => {
+                            remainder = remain;
+                            bytes[0]
+                        }
+                        Err(_) => return Err(nom::Err::Incomplete(nom::Needed::Unknown)),
+                    };
+
+                    result |= (<$t>::from(byte) & Self::SEGMENT_BITS) << position;
+
+                    position += 7;
+
+                    if position >= $max_pos {
+                        return Err(nom::Err::Error(nom::error::Error {
+                            input: remainder,
+                            code: nom::error::ErrorKind::Fail,
+                        }));
+                    }
+
+                    if (<$t>::from(byte) & Self::CONTINUE_BIT) == 0 {
+                        return Ok((remainder, result));
+                    }
                 }
-                Err(_) => return Err(nom::Err::Incomplete(nom::Needed::Unknown)),
-            };
-
-            result |= (i32::from(byte) & Self::SEGMENT_BITS) << position;
-
-            position += 7;
-
-            if position >= 32 {
-                return Err(nom::Err::Error(nom::error::Error {
-                    input: remainder,
-                    code: nom::error::ErrorKind::Fail,
-                }));
             }
 
-            if (i32::from(byte) & Self::CONTINUE_BIT) == 0 {
-                return Ok((remainder, result));
+            pub fn encode(mut value: $t) -> anyhow::Result<Vec<u8>> {
+                let mut buf: Vec<u8> = Vec::new();
+                loop {
+                    if (value & !Self::SEGMENT_BITS) == 0 {
+                        buf.push(u8::try_from(value)?);
+                        return Ok(buf);
+                    }
+
+                    buf.push(u8::try_from(
+                        (value & Self::SEGMENT_BITS) | Self::CONTINUE_BIT,
+                    )?);
+
+                    value >>= 7;
+                }
             }
         }
-    }
-
-    pub fn encode(mut value: i32) -> anyhow::Result<Vec<u8>> {
-        let mut buf: Vec<u8> = Vec::new();
-        loop {
-            if (value & !Self::SEGMENT_BITS) == 0 {
-                buf.push(u8::try_from(value)?);
-                return Ok(buf);
-            }
-
-            buf.push(u8::try_from(
-                (value & Self::SEGMENT_BITS) | Self::CONTINUE_BIT,
-            )?);
-
-            value >>= 7;
-        }
-    }
+    };
 }
+
+crate::create_var_number!(VarLong, i64, 64);
+crate::create_var_number!(VarInt, i32, 32);
 
 #[derive(Debug, Clone)]
 pub struct PacketString(pub String);
@@ -133,33 +141,31 @@ impl PacketBytes {
     }
 }
 
-pub fn read_u8(bytes: &[u8]) -> IResult<&[u8], u8> {
-    let Ok((remain, bytes)) = take::<usize, &[u8], ()>(1)(bytes) else {
-        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+crate::handler_number!(read_u8, u8, 1);
+crate::handler_number!(read_i8, i8, 1);
+crate::handler_number!(read_i16, i16, 2);
+crate::handler_number!(read_u16, u16, 2);
+crate::handler_number!(read_i32, i32, 4);
+crate::handler_number!(read_i64, i64, 8);
+crate::handler_number!(read_f32, f32, 4);
+crate::handler_number!(read_f64, f64, 8);
+
+#[macro_export]
+macro_rules! handler_number {
+    ($name:tt, $type:ty, $nbbytes:expr) => {
+        pub fn $name(bytes: &[u8]) -> IResult<&[u8], $type> {
+            let Ok((remain, bytes)) = take::<usize, &[u8], ()>($nbbytes)(bytes) else {
+                return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+            };
+
+            let Ok(bytes_into) = bytes.try_into() else {
+                return Err(nom::Err::Failure(nom::error::Error {
+                    input: bytes,
+                    code: nom::error::ErrorKind::Fail,
+                }));
+            };
+
+            Ok((remain, <$type>::from_be_bytes(bytes_into)))
+        }
     };
-
-    Ok((remain, bytes[0]))
-}
-
-pub fn read_u16(bytes: &[u8]) -> IResult<&[u8], u16> {
-    let Ok((remain, bytes)) = take::<usize, &[u8], ()>(2)(bytes) else {
-        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
-    };
-
-    Ok((remain, (u16::from(bytes[0]) << 8) | u16::from(bytes[1])))
-}
-
-pub fn read_i64(bytes: &[u8]) -> IResult<&[u8], i64> {
-    let Ok((remain, bytes)) = take::<usize, &[u8], ()>(8)(bytes) else {
-        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
-    };
-
-    let Ok(bytes_into) = bytes.try_into() else {
-        return Err(nom::Err::Failure(nom::error::Error {
-            input: bytes,
-            code: nom::error::ErrorKind::Fail,
-        }));
-    };
-
-    Ok((remain, i64::from_be_bytes(bytes_into)))
 }

@@ -31,30 +31,30 @@ impl RawPacket {
         })
     }
 
-    pub fn from_bytes(bytes: &Bytes, packetid: i32) -> Self {
+    pub fn from_bytes(bytes: &Bytes, packetid: i32) -> anyhow::Result<Self> {
         let mut bytespacketid = BytesMut::new();
 
-        bytespacketid.put_slice(&VarInt::encode(packetid).unwrap());
+        bytespacketid.put_slice(&VarInt::encode(packetid)?);
 
-        let lenght = i32::try_from(bytespacketid.len() + bytes.len()).unwrap();
+        let lenght = i32::try_from(bytespacketid.len() + bytes.len())?;
 
-        let byteslenght = VarInt::encode(lenght).unwrap();
+        let byteslenght = VarInt::encode(lenght)?;
 
-        Self {
+        Ok(Self {
             lenght,
             packetid,
             data: Bytes::copy_from_slice(
                 &[&byteslenght[..], &bytespacketid[..], &bytes[..]].concat(),
             ),
-        }
+        })
     }
 
     pub fn from_intoresponse(
         toresponse: impl IntoResponse,
         packet: &Packet,
         packetid: i32,
-    ) -> Self {
-        let bytes = toresponse.to_response(packet).unwrap();
+    ) -> anyhow::Result<Self> {
+        let bytes = toresponse.to_response(packet)?;
 
         Self::from_bytes(&bytes, packetid)
     }
@@ -67,13 +67,10 @@ impl RawPacket {
         Ok(packet)
     }
 
-    pub fn build_from_packet(to_send_packet: impl IntoResponse) -> Self {
+    pub fn build_from_packet(to_send_packet: impl IntoResponse) -> anyhow::Result<Self> {
         let packet = Packet::new();
         let id = to_send_packet.id();
-        Self::from_bytes(
-            &to_send_packet.to_response(&packet).unwrap(),
-            i32::try_from(id).unwrap(),
-        )
+        Self::from_bytes(&to_send_packet.to_response(&packet)?, i32::try_from(id)?)
     }
 }
 

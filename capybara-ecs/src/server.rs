@@ -3,7 +3,6 @@ use bevy::prelude::{
     Resource, SystemSet,
 };
 use std::net::TcpListener;
-use std::sync::Arc;
 
 use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
@@ -62,12 +61,17 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
     if let Ok((tcpstream, _)) = socket.0.accept() {
         let encryption_state = EncryptionState::default();
         let compression_state = CompressionState {};
+        let Ok(task) = ParseTask::new(
+            tcpstream,
+            encryption_state.clone(),
+            compression_state.clone(),
+        ) else {
+            error!("Cannot make parsetask");
+            return;
+        };
+
         let mut entity = commands.spawn(Player {
-            event: ParseTask::new(
-                Arc::new(tcpstream),
-                encryption_state.clone(),
-                compression_state.clone(),
-            ),
+            event: task,
             player_status: PlayerStatus(PacketState::Handshake),
             encryption_state,
             compression_state,
@@ -87,9 +91,10 @@ pub fn recv_packet(
         for rawpacket in i.get_packet() {
             let mut packet = Packet::new();
 
-            packet
-                .parse_from_rawpacket(&state.get_status(), &rawpacket)
-                .unwrap();
+            if let Err(error) = packet.parse_from_rawpacket(&state.get_status(), &rawpacket) {
+                error!("Cannot parse packet: {}", error);
+                continue;
+            }
 
             match &packet.packetdata {
                 PacketEnum::HandShake(packet) => {

@@ -5,8 +5,8 @@ use bevy::{
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use capybara_packet::{nom_mcpacket::VarInt, types::RawPacket, IntoResponse};
+use std::io::Write;
 use std::{io::Read, net::TcpStream};
-use std::{io::Write, sync::Arc};
 
 use crate::player::{CompressionState, EncryptionState};
 
@@ -37,41 +37,33 @@ pub struct ParseTask(
 
 impl ParseTask {
     pub fn new(
-        stream: Arc<TcpStream>,
+        stream: TcpStream,
         encryption: EncryptionState,
         compression: CompressionState,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let thread_pool = AsyncComputeTaskPool::get();
         let shared_state = SharedConnectionState::new(encryption, compression);
         let (to_send_sender, to_send_receiver) = flume::unbounded();
 
         let (new_packet_sender, new_packet_receiver) = flume::unbounded();
 
-        let reader = Reader::new(
-            new_packet_sender,
-            stream.try_clone().unwrap(),
-            shared_state.clone(),
-        );
-        let writer = Writer::new(
-            to_send_receiver,
-            stream.try_clone().unwrap(),
-            shared_state.clone(),
-        );
+        let reader = Reader::new(new_packet_sender, stream.try_clone()?, shared_state.clone());
+        let writer = Writer::new(to_send_receiver, stream.try_clone()?, shared_state.clone());
 
         let recv_task = thread_pool.spawn(async move { reader.run().await });
         let send_task = thread_pool.spawn(async move { writer.run().await });
 
-        Self(
+        Ok(Self(
             to_send_sender,
             new_packet_receiver,
             recv_task,
             send_task,
             shared_state,
-        )
+        ))
     }
 
     pub fn send_packet(&self, packet: impl IntoResponse) -> anyhow::Result<()> {
-        let rawpacket = RawPacket::build_from_packet(packet);
+        let rawpacket = RawPacket::build_from_packet(packet)?;
         self.0.send(rawpacket.data)?;
 
         Ok(())
@@ -205,11 +197,8 @@ impl Reader {
                 }
 
                 if self.packet.1.len() == lenght {
-                    if let Ok(rawpacket) = self.try_parse_packet() {
-                        self.new_packet.send(rawpacket).unwrap();
-                    } else {
-                        return Err(anyhow!(""));
-                    }
+                    let packet = self.try_parse_packet()?;
+                    self.new_packet.send(packet)?;
                 }
 
                 continue;
