@@ -1747,6 +1747,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nom-nbt"
+version = "0.1.0"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
