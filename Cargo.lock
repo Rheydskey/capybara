@@ -872,6 +872,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "capybara-nbt"
+version = "0.1.0"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "capybara-packet"
 version = "0.1.0"
 dependencies = [
@@ -1744,13 +1751,6 @@ dependencies = [
  "anyhow",
  "nom",
  "uuid",
-]
-
-[[package]]
-name = "nom-nbt"
-version = "0.1.0"
-dependencies = [
- "nom",
 ]
 
 [[package]]
