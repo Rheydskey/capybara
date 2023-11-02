@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use nom_nbt::RootCompound;
+use capybara_nbt::RootCompound;
 
 #[test]
 fn from_file() {

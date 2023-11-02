@@ -85,15 +85,15 @@ impl TupleFieldName {
 
 fn set_parser(name: &str) -> Group {
     let group = match name {
-        "arraybytes" => quote!(::nom_mcpacket::PacketBytes::parse),
-        "varint" => quote!(::nom_mcpacket::VarInt::parse),
+        "arraybytes" => quote!(::capybara_packet_parser::PacketBytes::parse),
+        "varint" => quote!(::capybara_packet_parser::VarInt::parse),
         "varlong" => todo!(),
-        "string" => quote!(::nom_mcpacket::PacketString::parse),
-        "u8" => quote!(::nom_mcpacket::read_u8),
-        "u16" => quote!(::nom_mcpacket::read_u16),
-        "bool" => quote!(::nom_mcpacket::PacketBool::parse),
-        "uuid" => quote!(::nom_mcpacket::PacketUuid::parse),
-        "i64" => quote!(::nom_mcpacket::read_i64),
+        "string" => quote!(::capybara_packet_parser::PacketString::parse),
+        "u8" => quote!(::capybara_packet_parser::read_u8),
+        "u16" => quote!(::capybara_packet_parser::read_u16),
+        "bool" => quote!(::capybara_packet_parser::PacketBool::parse),
+        "uuid" => quote!(::capybara_packet_parser::PacketUuid::parse),
+        "i64" => quote!(::capybara_packet_parser::read_i64),
         _ => unimplemented!("{}", name),
     };
 

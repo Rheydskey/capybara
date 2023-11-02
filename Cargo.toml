@@ -5,6 +5,6 @@ members = [
   "capybara-ecs",
   'capybara-macros',
   'capybara-packet',
-  'nom-mcpacket',
+  'capybara-packetparser',
   'capybara-nbt'
 ]

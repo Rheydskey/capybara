@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 capybara-macros= {path = "../capybara-macros"}
-nom-mcpacket = {path = "../nom-mcpacket"}
+capybara-packet-parser = {path = "../capybara-packetparser"}
 
 nom = "7.1"
 serde = {version = "1", features = ["derive"]}

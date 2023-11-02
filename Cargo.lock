@@ -885,14 +885,23 @@ dependencies = [
  "anyhow",
  "bytes",
  "capybara-macros",
+ "capybara-packet-parser",
  "log",
  "nom",
- "nom-mcpacket",
  "rand",
  "rsa",
  "serde",
  "serde_json",
  "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "capybara-packet-parser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nom",
  "uuid",
 ]
 
@@ -1742,15 +1751,6 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
-]
-
-[[package]]
-name = "nom-mcpacket"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "nom",
- "uuid",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
-use nom_mcpacket::VarInt;
+use capybara_packet_parser::VarInt;
 use serde::Deserialize;
 use serde::Serialize;
 

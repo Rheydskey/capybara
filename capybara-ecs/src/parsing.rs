@@ -4,7 +4,7 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task},
 };
 use bytes::{BufMut, Bytes, BytesMut};
-use capybara_packet::{nom_mcpacket::VarInt, types::RawPacket, IntoResponse};
+use capybara_packet::{capybara_packet_parser::VarInt, types::RawPacket, IntoResponse};
 use std::io::Write;
 use std::{io::Read, net::TcpStream};
 
