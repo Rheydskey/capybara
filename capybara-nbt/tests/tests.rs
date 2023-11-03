@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use capybara_nbt::RootCompound;
+use capybara_nbt::{mcregion::Region, RootCompound};
 
 #[test]
 fn from_file() {
@@ -19,5 +19,15 @@ fn region() {
     let mut bytes = Vec::new();
     test_file.read_to_end(&mut bytes).unwrap();
 
-    //    RootCompound::parse(&bytes);
+    let region = Region::parse(&bytes).unwrap();
+}
+
+#[test]
+fn region2() {
+    let mut test_file = std::fs::File::open("./tests/region.mca").unwrap();
+
+    let mut bytes = Vec::new();
+    test_file.read_to_end(&mut bytes).unwrap();
+
+    let region = Region::parse(&bytes).unwrap();
 }

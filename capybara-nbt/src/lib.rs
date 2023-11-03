@@ -1,6 +1,7 @@
-use std::num::{NonZeroU16, NonZeroUsize};
+pub mod mcregion;
 
 use nom::{bytes::complete::take, IResult, Needed, Parser};
+use std::num::{NonZeroU16, NonZeroUsize};
 
 #[derive(Debug)]
 pub struct RootCompound {
@@ -8,17 +9,17 @@ pub struct RootCompound {
 }
 
 impl RootCompound {
+    fn empty() -> Self {
+        Self { tags: Vec::new() }
+    }
     fn parse_compound(bytes: &[u8]) -> IResult<&[u8], Self> {
         let mut remainder = bytes;
         let mut tags = Vec::new();
         while !remainder.is_empty() {
-            println!("{tags:?}");
             let (remain, tag) = Tag::parse(bytes)?;
             tags.push(tag);
             remainder = remain;
         }
-
-        println!("{tags:#?}");
 
         Ok((remainder, Self { tags }))
     }
@@ -41,7 +42,6 @@ impl Tag {
     fn parse_header(bytes: &[u8]) -> IResult<&[u8], (u8, String)> {
         let (remain, value) = nom::bytes::complete::take::<usize, &[u8], ()>(1)(bytes).unwrap();
         let id = value[0];
-        println!("Id: {}", value[0]);
 
         if id == 0 {
             return Ok((remain, (id, String::new())));
@@ -50,8 +50,6 @@ impl Tag {
         let (remain, value) = nom::bytes::complete::take::<usize, &[u8], ()>(2)(remain).unwrap();
 
         let lenght = u16::from_be_bytes(value.try_into().unwrap());
-
-        println!("Name lenght : {lenght}");
 
         let Ok((remain, name)) = nom::bytes::complete::take::<u16, &[u8], ()>(lenght)(remain)
         else {
@@ -223,9 +221,11 @@ pub enum TagInner {
 }
 
 crate::handler_number!(read_i8, i8, 1);
+crate::handler_number!(read_u8, u8, 1);
 crate::handler_number!(read_i16, i16, 2);
 crate::handler_number!(read_u16, u16, 2);
 crate::handler_number!(read_i32, i32, 4);
+crate::handler_number!(read_u32, u32, 4);
 crate::handler_number!(read_u64, u64, 8);
 crate::handler_number!(read_i64, i64, 8);
 crate::handler_number!(read_f32, f32, 4);
