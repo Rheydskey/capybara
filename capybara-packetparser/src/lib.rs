@@ -150,7 +150,7 @@ impl Parsable for PacketString {
     type Target = String;
 
     fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        PacketString::parse(bytes)
+        Self::parse(bytes)
     }
 }
 
@@ -170,7 +170,7 @@ impl Parsable for PacketBool {
     type Target = bool;
 
     fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        PacketBool::parse(bytes)
+        Self::parse(bytes)
     }
 }
 
@@ -194,7 +194,7 @@ impl Parsable for PacketBytes {
     type Target = Vec<u8>;
 
     fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        PacketBytes::parse(bytes)
+        Self::parse(bytes)
     }
 }
 
@@ -274,14 +274,14 @@ impl Parsable for Angle {
 struct Position(u64);
 
 impl Position {
-    fn x(&self) -> i32 {
-        return 0;
+    const fn x() -> i32 {
+        0
     }
-    fn y(&self) -> i16 {
-        return 0;
+    const fn y() -> i16 {
+        0
     }
-    fn z(&self) -> i32 {
-        return 0;
+    const fn z() -> i32 {
+        0
     }
 }
 
@@ -327,15 +327,13 @@ impl Parsable for Identifier {
 }
 
 #[inline]
-pub fn is_namespace_valid(chr: u8) -> bool {
-    (chr >= b'a' && chr <= b'z')
-        || (chr >= b'0' && chr <= b'9')
-        || chr == b'.'
-        || chr == b'-'
-        || chr == b'_'
+#[must_use]
+pub const fn is_namespace_valid(chr: u8) -> bool {
+    chr.is_ascii_lowercase() || chr.is_ascii_digit() || chr == b'.' || chr == b'-' || chr == b'_'
 }
 
 #[inline]
-pub fn is_value_valid(chr: u8) -> bool {
+#[must_use]
+pub const fn is_value_valid(chr: u8) -> bool {
     is_namespace_valid(chr) || chr == b'/'
 }

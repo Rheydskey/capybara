@@ -1,34 +1,31 @@
-use nom::{
-    bytes::{complete::take, streaming::take_while},
-    error::Error,
-    multi::length_count,
-    sequence::tuple,
-    IResult, Parser,
-};
+use std::num::{NonZeroU16, NonZeroUsize};
+
+use nom::{bytes::complete::take, IResult, Needed, Parser};
 
 #[derive(Debug)]
 pub struct RootCompound {
-    tags: Vec<Box<Tag>>,
+    pub tags: Vec<Tag>,
 }
 
 impl RootCompound {
-    fn parse_compound(bytes: &[u8]) -> IResult<&[u8], RootCompound> {
+    fn parse_compound(bytes: &[u8]) -> IResult<&[u8], Self> {
         let mut remainder = bytes;
         let mut tags = Vec::new();
         while !remainder.is_empty() {
             println!("{tags:?}");
-            let (remain, tag) = Tag::parse(bytes).unwrap();
-            tags.push(Box::new(tag));
+            let (remain, tag) = Tag::parse(bytes)?;
+            tags.push(tag);
             remainder = remain;
         }
 
-        println!("{:#?}", tags);
+        println!("{tags:#?}");
 
-        return Ok((remainder, Self { tags }));
+        Ok((remainder, Self { tags }))
     }
 
+    #[must_use]
     pub fn parse(bytes: &[u8]) -> Self {
-        let (remain, value) = Self::parse_compound(bytes).unwrap();
+        let (_, value) = Self::parse_compound(bytes).unwrap();
 
         value
     }
@@ -36,8 +33,8 @@ impl RootCompound {
 
 #[derive(Debug)]
 pub struct Tag {
-    name: String,
-    tag: TagInner,
+    pub name: String,
+    pub tag: TagInner,
 }
 
 impl Tag {
@@ -47,16 +44,22 @@ impl Tag {
         println!("Id: {}", value[0]);
 
         if id == 0 {
-            return Ok((remain, (id, "".to_string())));
+            return Ok((remain, (id, String::new())));
         }
 
         let (remain, value) = nom::bytes::complete::take::<usize, &[u8], ()>(2)(remain).unwrap();
 
         let lenght = u16::from_be_bytes(value.try_into().unwrap());
 
-        println!("Name lenght : {}", lenght);
+        println!("Name lenght : {lenght}");
 
-        let (remain, name) = nom::bytes::complete::take::<u16, &[u8], ()>(lenght)(remain).unwrap();
+        let Ok((remain, name)) = nom::bytes::complete::take::<u16, &[u8], ()>(lenght)(remain)
+        else {
+            return Err(nom::Err::Incomplete(
+                NonZeroU16::new(lenght)
+                    .map_or(Needed::Unknown, |f| Needed::Size(NonZeroUsize::from(f))),
+            ));
+        };
 
         let name = String::from_utf8(name.to_vec()).unwrap();
 
@@ -125,7 +128,7 @@ impl Tag {
             for _ in 0..size.unsigned_abs() {
                 let (i, o) = parse.parse(remainder)?;
                 remainder = i;
-                result.push(o)
+                result.push(o);
             }
 
             Ok((remainder, result))
@@ -139,7 +142,7 @@ impl Tag {
         Ok((remain, TagInner::List(elements)))
     }
 
-    fn parse_end(bytes: &[u8]) -> IResult<&[u8], TagInner> {
+    const fn parse_end(bytes: &[u8]) -> IResult<&[u8], TagInner> {
         Ok((bytes, TagInner::End))
     }
 
@@ -154,7 +157,7 @@ impl Tag {
                 break;
             }
 
-            children.push(Box::new(child))
+            children.push(Box::new(child));
         }
 
         Ok((remainder, TagInner::Compound(children)))
@@ -170,6 +173,7 @@ impl Tag {
         Ok((remain, TagInner::LongArray(elements)))
     }
 
+    #[must_use]
     pub fn tag_parse(id: u8) -> fn(&[u8]) -> IResult<&[u8], TagInner> {
         match id {
             0 => Self::parse_end,
@@ -187,7 +191,7 @@ impl Tag {
             12 => Self::parse_long_array,
             _ => {
                 println!("Other type");
-                return panic!("Wrong type");
+                panic!("Wrong type");
             }
         }
     }
@@ -216,10 +220,6 @@ pub enum TagInner {
     Compound(Vec<Box<Tag>>),
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
-}
-
-impl Tag {
-    //    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Tag> {}
 }
 
 crate::handler_number!(read_i8, i8, 1);
