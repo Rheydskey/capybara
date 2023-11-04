@@ -2,80 +2,55 @@
 mod test;
 
 use std::marker::PhantomData;
+use winnow::{
+    binary::{be_u64, be_u8},
+    error::AddContext,
+    token::{take, take_while},
+};
 
-use nom::{bytes::complete::take, combinator::map, IResult};
 use uuid::Uuid;
+use winnow::{
+    binary::be_u128,
+    stream::{AsBytes, Stream, StreamIsPartial},
+    PResult, Parser,
+};
+
+pub use winnow;
 
 pub trait Parsable {
     type Target;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target>;
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes;
 }
 
 pub struct PacketUuid(uuid::Uuid);
 
-impl PacketUuid {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Uuid> {
-        let (bytes, uuid) = map(
-            nom::number::streaming::u128(nom::number::Endianness::Big),
-            uuid::Uuid::from_u128,
-        )(bytes)?;
-
-        Ok((bytes, uuid))
-    }
-}
-
 impl Parsable for PacketUuid {
     type Target = Uuid;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        let (bytes, uuid) = map(
-            nom::number::streaming::u128(nom::number::Endianness::Big),
-            uuid::Uuid::from_u128,
-        )(bytes)?;
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        let a = be_u128.parse_next(bytes)?;
+        let uuid = uuid::Uuid::from_u128(a);
 
-        Ok((bytes, uuid))
+        Ok(uuid)
     }
 }
 
 #[macro_export]
 macro_rules! create_var_number {
-    ($n:tt, $t:ty, $max_pos:expr) => {
+    ($n:tt, $t:ty, $max_pos:expr, $parser:expr) => {
         pub struct $n;
 
         impl $n {
             const SEGMENT_BITS: $t = 0x7F;
             const CONTINUE_BIT: $t = 0x80;
-
-            pub fn parse(bytes: &[u8]) -> IResult<&[u8], $t> {
-                let mut remainder = bytes;
-                let mut result = 0;
-                let mut position = 0;
-                loop {
-                    let byte = match nom::bytes::complete::take::<usize, &[u8], ()>(1)(remainder) {
-                        Ok((remain, bytes)) => {
-                            remainder = remain;
-                            bytes[0]
-                        }
-                        Err(_) => return Err(nom::Err::Incomplete(nom::Needed::Unknown)),
-                    };
-
-                    result |= (<$t>::from(byte) & Self::SEGMENT_BITS) << position;
-
-                    position += 7;
-
-                    if position >= $max_pos {
-                        return Err(nom::Err::Error(nom::error::Error {
-                            input: remainder,
-                            code: nom::error::ErrorKind::Fail,
-                        }));
-                    }
-
-                    if (<$t>::from(byte) & Self::CONTINUE_BIT) == 0 {
-                        return Ok((remainder, result));
-                    }
-                }
-            }
 
             pub fn encode(mut value: $t) -> anyhow::Result<Vec<u8>> {
                 let mut buf: Vec<u8> = Vec::new();
@@ -97,45 +72,56 @@ macro_rules! create_var_number {
         impl Parsable for $n {
             type Target = $t;
 
-            fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-                Self::parse(bytes)
+            fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+            where
+                I: StreamIsPartial + Stream<Token = u8>,
+                <I as Stream>::Slice: AsBytes,
+            {
+                let mut result = 0;
+                let mut position = 0;
+                loop {
+                    let byte = be_u8.parse_next(bytes)?;
+
+                    result |= (<$t>::from(byte) & Self::SEGMENT_BITS) << position;
+
+                    position += 7;
+
+                    if position >= $max_pos {
+                        return Err(winnow::error::ErrMode::Cut(
+                            winnow::error::ContextError::new()
+                                .add_context(bytes, winnow::error::StrContext::Label("Too long")),
+                        ));
+                    }
+
+                    if (<$t>::from(byte) & Self::CONTINUE_BIT) == 0 {
+                        return Ok(result);
+                    }
+                }
             }
         }
     };
 }
 
-crate::create_var_number!(VarLong, i64, 64);
-crate::create_var_number!(VarInt, i32, 32);
+crate::create_var_number!(VarLong, i64, 64, be_i64);
+crate::create_var_number!(VarInt, i32, 32, be_i32);
 
-pub fn transform_to_string(bytes: &[u8]) -> IResult<&[u8], String> {
+pub fn transform_to_string(bytes: &&[u8]) -> PResult<String> {
     let Ok(string) = std::str::from_utf8(bytes) else {
-        return Err(nom::Err::Failure(nom::error::Error {
-            input: bytes,
-            code: nom::error::ErrorKind::Fail,
-        }));
+        return Err(winnow::error::ErrMode::Cut(
+            winnow::error::ContextError::new().add_context(
+                bytes,
+                winnow::error::StrContext::Label("Cannot convert to String"),
+            ),
+        ));
     };
 
-    Ok((bytes, string.to_string()))
+    Ok(string.to_string())
 }
 
 #[derive(Debug, Clone)]
 pub struct PacketString(pub String);
 
 impl PacketString {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], String> {
-        let (input, value) = VarInt::parse(bytes)?;
-        let take_bytes =
-            nom::bytes::complete::take::<usize, &[u8], ()>(value.unsigned_abs() as usize);
-
-        let Ok((input, value)) = take_bytes(input) else {
-            return Err(nom::Err::Incomplete(nom::Needed::Unknown));
-        };
-
-        let (bytes, string) = transform_to_string(value)?;
-
-        Ok((input, string))
-    }
-
     pub fn encode(string: &str) -> anyhow::Result<Vec<u8>> {
         let mut bytes = Vec::new();
 
@@ -149,64 +135,52 @@ impl PacketString {
 impl Parsable for PacketString {
     type Target = String;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        Self::parse(bytes)
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        let value = VarInt::parse(bytes)?;
+        let mut take_bytes = take(value.unsigned_abs() as usize);
+
+        let value = take_bytes.parse_next(bytes)?;
+
+        let string = transform_to_string(&value.as_bytes())?;
+
+        Ok(string)
     }
 }
 
 pub struct PacketBool(bool);
 
-impl PacketBool {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], bool> {
-        let Ok((remain, bytes)) = nom::bytes::complete::take::<usize, &[u8], ()>(1)(bytes) else {
-            return Err(nom::Err::Incomplete(nom::Needed::Unknown));
-        };
-
-        Ok((remain, bytes[0] == 0x01))
-    }
-}
-
 impl Parsable for PacketBool {
     type Target = bool;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        Self::parse(bytes)
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        Ok(be_u8(bytes)? == 0x01)
     }
 }
 
 pub struct PacketBytes(Vec<u8>);
 
-impl PacketBytes {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Vec<u8>> {
-        let (input, value) = VarInt::parse(bytes)?;
-        let take_bytes =
-            nom::bytes::complete::take::<usize, &[u8], ()>(value.unsigned_abs() as usize);
-
-        let Ok((input, value)) = take_bytes(input) else {
-            return Err(nom::Err::Incomplete(nom::Needed::Unknown));
-        };
-
-        Ok((input, value.to_vec()))
-    }
-}
-
 impl Parsable for PacketBytes {
     type Target = Vec<u8>;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        Self::parse(bytes)
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        let length = VarInt::parse(bytes)?;
+        let values = take(length.unsigned_abs() as usize).parse_next(bytes)?;
+
+        Ok(values.as_bytes().to_vec())
     }
 }
-
-crate::handler_number!(read_u8, u8, 1);
-crate::handler_number!(read_i8, i8, 1);
-crate::handler_number!(read_i16, i16, 2);
-crate::handler_number!(read_u16, u16, 2);
-crate::handler_number!(read_i32, i32, 4);
-crate::handler_number!(read_u64, u64, 8);
-crate::handler_number!(read_i64, i64, 8);
-crate::handler_number!(read_f32, f32, 4);
-crate::handler_number!(read_f64, f64, 8);
 
 #[macro_export]
 macro_rules! handler_number {
@@ -241,16 +215,14 @@ pub struct PacketBoolOption<T> {
 }
 
 impl<T: Parsable> PacketBoolOption<T> {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Option<T::Target>> {
-        let (remain, is_some) = PacketBool::parse(bytes)?;
+    pub fn parse(bytes: &mut &[u8]) -> PResult<Option<T::Target>> {
+        if PacketBool::parse(bytes)? {
+            let result = T::parse(bytes)?;
 
-        if is_some {
-            let (remain, result) = T::parse(remain)?;
-
-            return Ok((remain, Some(result)));
+            return Ok(Some(result));
         }
 
-        Ok((remain, None))
+        Ok(None)
     }
 }
 
@@ -266,8 +238,12 @@ impl Angle {
 impl Parsable for Angle {
     type Target = u8;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        read_u8(bytes)
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        be_u8(bytes)
     }
 }
 
@@ -288,10 +264,14 @@ impl Position {
 impl Parsable for Position {
     type Target = Self;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        let (bytes, num) = read_u64(bytes)?;
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        let num = be_u64(bytes)?;
 
-        Ok((bytes, Self(num)))
+        Ok(Self(num))
     }
 }
 
@@ -303,26 +283,27 @@ pub struct Identifier {
 impl Parsable for Identifier {
     type Target = Self;
 
-    fn parse(bytes: &[u8]) -> IResult<&[u8], Self::Target> {
-        let (remain, namespace) = nom::bytes::complete::take_while(is_namespace_valid)(bytes)?;
-        let (remain, _) = nom::bytes::complete::tag(":")(remain)?;
-        let (remain, value) = nom::bytes::complete::take_while1(is_value_valid)(remain)?;
+    fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        let namespace = take_while(1.., is_namespace_valid).parse_next(bytes)?;
+        let _ = b':'.parse_next(bytes)?;
+        let value = take_while(1.., is_value_valid).parse_next(bytes)?;
 
-        let (_, namespace) = transform_to_string(namespace)?;
+        let namespace = transform_to_string(&namespace.as_bytes())?;
 
-        let (_, value) = transform_to_string(value)?;
+        let value = transform_to_string(&value.as_bytes())?;
 
         if namespace.is_empty() {
-            return Ok((
-                remain,
-                Self {
-                    namespace: "minecraft".to_string(),
-                    value,
-                },
-            ));
+            return Ok(Self {
+                namespace: "minecraft".to_string(),
+                value,
+            });
         }
 
-        Ok((remain, Self { namespace, value }))
+        Ok(Self { namespace, value })
     }
 }
 

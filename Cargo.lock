@@ -876,7 +876,7 @@ name = "capybara-nbt"
 version = "0.1.0"
 dependencies = [
  "flate2",
- "nom",
+ "winnow",
 ]
 
 [[package]]
@@ -902,8 +902,8 @@ name = "capybara-packet-parser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "nom",
  "uuid",
+ "winnow",
 ]
 
 [[package]]

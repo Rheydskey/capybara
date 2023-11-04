@@ -89,11 +89,11 @@ fn set_parser(name: &str) -> Group {
         "varint" => quote!(::capybara_packet_parser::VarInt::parse),
         "varlong" => todo!(),
         "string" => quote!(::capybara_packet_parser::PacketString::parse),
-        "u8" => quote!(::capybara_packet_parser::read_u8),
-        "u16" => quote!(::capybara_packet_parser::read_u16),
+        "u8" => quote!(::capybara_packet_parser::winnow::binary::be_u8),
+        "u16" => quote!(::capybara_packet_parser::winnow::binary::be_u16),
         "bool" => quote!(::capybara_packet_parser::PacketBool::parse),
         "uuid" => quote!(::capybara_packet_parser::PacketUuid::parse),
-        "i64" => quote!(::capybara_packet_parser::read_i64),
+        "i64" => quote!(::capybara_packet_parser::winnow::binary::be_i64::<&[u8], ()>),
         _ => unimplemented!("{}", name),
     };
 
@@ -113,13 +113,10 @@ impl TupleParserName {
 
         if parsers.len() == 1 {
             let parser = parsers[0].clone();
-            return Group::new(Delimiter::None, quote!(#parser(bytes)));
+            return Group::new(Delimiter::None, quote!(#parser.parse_next(bytes)));
         }
 
-        Group::new(
-            Delimiter::None,
-            quote!(::nom::sequence::tuple((#(#parsers),*))(bytes)),
-        )
+        Group::new(Delimiter::None, quote!((#(#parsers),*).parse_next(bytes)))
     }
 }
 
@@ -143,7 +140,7 @@ impl ToTokens for SelfFromBytes {
         tokens.append(Group::new(
             Delimiter::None,
             quote!(
-                let (remain, (#tuple)) = #parsers.unwrap();
+                let (#tuple) = #parsers.unwrap();
 
                 Ok(Self {
                     #(#frombytes)*
@@ -350,6 +347,10 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
         #[automatically_derived]
         impl crate::PacketTrait for #ident {
             fn from_bytes(bytes: &[u8]) -> ::anyhow::Result<Self> {
+                use ::capybara_packet_parser::winnow::Parser;
+                use ::capybara_packet_parser::Parsable;
+                use ::capybara_packet_parser::winnow::stream::AsBytes;
+                let bytes = &mut bytes.as_bytes();
                 #from_bytes
             }
         }

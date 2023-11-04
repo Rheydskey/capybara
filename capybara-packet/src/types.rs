@@ -1,6 +1,7 @@
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
+use capybara_packet_parser::Parsable;
 use capybara_packet_parser::VarInt;
 use serde::Deserialize;
 use serde::Serialize;
@@ -20,14 +21,15 @@ pub struct RawPacket {
 
 impl RawPacket {
     pub fn read_lenght_given(bytes: &[u8], lenght: i32) -> anyhow::Result<Self> {
-        let Ok((remain, packetid)) = VarInt::parse(bytes) else {
+        let mut a = bytes;
+        let Ok(packetid) = VarInt::parse(&mut a) else {
             return Err(anyhow::anyhow!("Cannot parse varint"));
         };
 
         Ok(Self {
             lenght,
             packetid,
-            data: Bytes::copy_from_slice(&remain),
+            data: Bytes::copy_from_slice(a),
         })
     }
 

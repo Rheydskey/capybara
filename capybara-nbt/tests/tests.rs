@@ -8,8 +8,8 @@ fn from_file() {
 
     let mut bytes = Vec::new();
     test_file.read_to_end(&mut bytes).unwrap();
-
-    RootCompound::parse(&bytes);
+    let mut bytes = bytes.as_slice();
+    let _ = RootCompound::parse(&mut bytes);
 }
 
 #[test]
@@ -18,8 +18,8 @@ fn region() {
 
     let mut bytes = Vec::new();
     test_file.read_to_end(&mut bytes).unwrap();
-
-    let region = Region::parse(&bytes).unwrap();
+    let mut slice_data = bytes.as_slice();
+    Region::parse(&mut slice_data).unwrap();
 }
 
 #[test]
@@ -29,5 +29,6 @@ fn region2() {
     let mut bytes = Vec::new();
     test_file.read_to_end(&mut bytes).unwrap();
 
-    let region = Region::parse(&bytes).unwrap();
+    let mut slice_data = bytes.as_slice();
+    Region::parse(&mut slice_data).unwrap();
 }

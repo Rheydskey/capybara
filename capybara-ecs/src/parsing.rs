@@ -4,7 +4,11 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task},
 };
 use bytes::{BufMut, Bytes, BytesMut};
-use capybara_packet::{capybara_packet_parser::VarInt, types::RawPacket, IntoResponse};
+use capybara_packet::{
+    capybara_packet_parser::{Parsable, VarInt},
+    types::RawPacket,
+    IntoResponse,
+};
 use std::io::Write;
 use std::{io::Read, net::TcpStream};
 
@@ -155,8 +159,8 @@ impl Reader {
         while let Ok(byte) = self.read_u8() {
             info!("{:?}", self.packet);
             buf.push(byte);
-            if let Ok((remain, value)) = VarInt::parse(buf.as_slice()) {
-                if !remain.is_empty() {
+            if let Ok(value) = VarInt::parse(&mut buf.as_slice()) {
+                if !buf.is_empty() {
                     warn!("Remaining bytes weird");
                 }
                 return Ok(value);

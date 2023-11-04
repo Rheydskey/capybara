@@ -1,9 +1,13 @@
 use std::io::Read;
 
 use flate2::bufread::ZlibDecoder;
-use nom::{bytes::complete::take, multi::count, IResult};
+use winnow::{
+    binary::{be_i32, be_u32, be_u8, length_count},
+    error::{AddContext, ContextError},
+    PResult, Parser,
+};
 
-use crate::{read_i32, read_u32, read_u64, read_u8, RootCompound};
+use crate::RootCompound;
 
 #[derive(Debug)]
 pub struct Location {
@@ -12,15 +16,15 @@ pub struct Location {
 }
 
 impl Location {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Self> {
-        let (remain, offset) = read_u32(bytes)?;
+    pub fn parse(bytes: &mut &[u8]) -> PResult<Self> {
+        let offset = be_u32(bytes)?;
 
         let result = Self {
-            offset: ((offset >> 8) & 0xFFFFFF) * 4096,
+            offset: ((offset >> 8) & 0x00FF_FFFF) * 4096,
             size: (offset & 0xFF) * 4096,
         };
 
-        Ok((remain, result))
+        Ok(result)
     }
 }
 
@@ -28,30 +32,34 @@ impl Location {
 pub struct Timestamps(u32);
 
 impl Timestamps {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Self> {
-        let (remain, timestamp) = read_u32(bytes)?;
+    pub fn parse(bytes: &mut &[u8]) -> PResult<Self> {
+        let timestamp = be_u32(bytes)?;
 
-        Ok((remain, Self(timestamp)))
+        Ok(Self(timestamp))
     }
 }
 
 #[derive(Debug)]
 pub struct Region {
-    locations: Vec<Location>,
-    timestamps: Vec<Timestamps>,
-    chunks: Vec<Chunk>,
+    pub locations: Vec<Location>,
+    pub timestamps: Vec<Timestamps>,
+    pub chunks: Vec<Chunk>,
 }
 
 impl Region {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Self> {
-        let (remain, locations) = count(Location::parse, 1024)(bytes)?;
-        let (remain, timestamps) = count(Timestamps::parse, 1024)(remain)?;
+    pub fn parse(bytes: &mut &[u8]) -> PResult<Self> {
+        let locations: Vec<Location> =
+            length_count(|_: &mut _| -> PResult<usize> { Ok(1024) }, Location::parse)
+                .parse_next(bytes)?;
+
+        let timestamps = length_count(
+            |_: &mut _| -> PResult<usize> { Ok(1024) },
+            Timestamps::parse,
+        )
+        .parse_next(bytes)?;
 
         let mut chunks = Vec::new();
-        for location in &locations {
-            let Location { offset, size } = location;
-            let chunk_data = &bytes[*offset as usize..(*offset + *size) as usize];
-
+        for Location { offset, size } in &locations {
             if *size == 0 {
                 chunks.push(Chunk {
                     lenght: 0,
@@ -61,51 +69,54 @@ impl Region {
                 continue;
             }
 
-            let (_, a) = Chunk::parse(chunk_data)?;
+            let mut chunk_data =
+                &bytes[(*offset - 8192) as usize..(*offset + *size - 8192) as usize];
 
-            chunks.push(a);
+            chunks.push(Chunk::parse(&mut chunk_data)?);
         }
 
-        Ok((
-            remain,
-            Self {
-                locations,
-                timestamps,
-                chunks,
-            },
-        ))
+        Ok(Self {
+            locations,
+            timestamps,
+            chunks,
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct Chunk {
-    lenght: i32,
-    compression_type: u8,
-    data: RootCompound,
+    pub lenght: i32,
+    pub compression_type: u8,
+    pub data: RootCompound,
 }
 
 impl Chunk {
-    pub fn parse(bytes: &[u8]) -> IResult<&[u8], Self> {
-        let (remain, lenght) = read_i32(bytes)?;
+    pub fn parse(bytes: &mut &[u8]) -> PResult<Self> {
+        let lenght = be_i32(bytes)?;
+        let compression_type = be_u8(bytes)?;
+        let data = winnow::token::take::<u32, &[u8], ContextError>(lenght.unsigned_abs())
+            .parse_next(bytes)?;
 
-        let (remain, compression_type) = read_u8(remain)?;
-        let take_compressed_data = take::<u32, &[u8], ()>(lenght.unsigned_abs());
-
-        let (remain, data) = take_compressed_data(remain).unwrap();
         let mut zlib_decoder = ZlibDecoder::new(data);
         let mut chunk_data = Vec::new();
 
-        zlib_decoder.read_to_end(&mut chunk_data).unwrap();
+        if zlib_decoder.read_to_end(&mut chunk_data).is_err() {
+            return Err(winnow::error::ErrMode::Cut(
+                ContextError::new().add_context(
+                    bytes,
+                    winnow::error::StrContext::Label("Correct zlib arraybytes"),
+                ),
+            ));
+        }
 
-        let data = RootCompound::parse(&chunk_data);
+        let mut slice_data = chunk_data.as_slice();
 
-        Ok((
-            remain,
-            Self {
-                lenght,
-                compression_type,
-                data,
-            },
-        ))
+        let data = RootCompound::parse(&mut slice_data)?;
+
+        Ok(Self {
+            lenght,
+            compression_type,
+            data,
+        })
     }
 }
