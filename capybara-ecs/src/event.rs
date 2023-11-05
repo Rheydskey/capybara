@@ -79,7 +79,7 @@ pub fn ping_handler(
     parse_task: Query<&ParseTask, With<PlayerStatusMarker::Status>>,
     mut ping: EventReader<PingRequest>,
 ) {
-    for PingRequest(entity, packet) in ping.iter() {
+    for PingRequest(entity, packet) in ping.read() {
         let Ok(a) = parse_task.get(*entity) else {
             continue;
         };
@@ -97,7 +97,7 @@ pub fn handshake_handler(
     parse_task: Query<&ParseTask, With<PlayerStatusMarker::Handshaking>>,
     mut handshakes: EventReader<Handshake>,
 ) {
-    for Handshake(entity, handshake) in handshakes.iter() {
+    for Handshake(entity, handshake) in handshakes.read() {
         info!("{entity:?}");
         let Ok(p) = parse_task.get(*entity) else {
             continue;
@@ -139,7 +139,7 @@ pub fn login_handler(
     rsa: Res<GlobalServerConfig>,
     mut logins: EventReader<Login>,
 ) {
-    for Login(entity, login) in logins.iter() {
+    for Login(entity, login) in logins.read() {
         info!("Login for {entity:?}");
         let Ok(task) = parse_task.get(*entity) else {
             info!("No task for {entity:?}");
@@ -193,7 +193,7 @@ pub fn response_encryption(
     mut responses: EventReader<EncryptionResponse>,
     rsa: Res<GlobalServerConfig>,
 ) {
-    for EncryptionResponse(entity, response) in responses.iter() {
+    for EncryptionResponse(entity, response) in responses.read() {
         info!("{:?}", entity);
         let Ok((e, a, es, uuid, name)) = parse_task.get_mut(*entity) else {
             info!("No entity for this");
