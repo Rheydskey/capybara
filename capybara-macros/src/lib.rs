@@ -4,7 +4,7 @@ use proc_macro2::{Delimiter, Group, Ident, Span};
 
 use syn::{
     parse_macro_input, AngleBracketedGenericArguments, Attribute, DataStruct, DeriveInput, Fields,
-    GenericArgument, PathArguments, Type,
+    GenericArgument, PathArguments, Type, TypePath,
 };
 extern crate proc_macro;
 use quote::{quote, ToTokens, TokenStreamExt};
@@ -66,6 +66,91 @@ impl IntoResponse {
         let put_slice = Group::new(Delimiter::None, quote!(bytes.put_i64(#group);));
 
         tokens.append(put_slice);
+    }
+}
+
+struct FieldName;
+
+impl FieldName {
+    pub fn parse(field: &syn::Field) -> Option<String> {
+        let Some(ident) = &field.ident else {
+            return None;
+        };
+
+        Some(ident.to_string())
+    }
+}
+
+struct FieldType;
+
+impl FieldType {
+    pub fn gentype_contains_type(barket: &AngleBracketedGenericArguments) -> bool {
+        for i in &barket.args {
+            if let GenericArgument::Type(_) = i {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn gentype_to_vec(barket: &AngleBracketedGenericArguments) -> Vec<String> {
+        barket
+            .args
+            .iter()
+            .filter_map(|f| {
+                let GenericArgument::Type(Type::Path(seg)) = f else {
+                    return None;
+                };
+
+                let Some(ident) = seg.path.get_ident() else {
+                    return None;
+                };
+
+                Some(ident.to_string())
+            })
+            .collect::<Vec<String>>()
+    }
+
+    pub fn parse_ftype(field: &syn::Field) -> Option<FType> {
+        let typath = FieldType::parse_type_path(&field)?;
+
+        if let Some(ident) = typath.path.get_ident() {
+            return Some(FType::NonGeneric(ident.to_string()));
+        }
+
+        if let Some(segment) = typath.path.segments.last() {
+            let toptype = segment.ident.to_string();
+
+            if matches!(segment.arguments, PathArguments::None) {
+                return Some(FType::NonGeneric(toptype));
+            }
+
+            if let PathArguments::AngleBracketed(gentype) = &segment.arguments {
+                if Self::gentype_contains_type(gentype) {
+                    return Some(FType::Generic(toptype, Self::gentype_to_vec(gentype)));
+                }
+
+                return Some(FType::NonGeneric(toptype));
+            }
+
+            unimplemented!();
+        }
+
+        println!(
+            "Error on {:?} | {:?}",
+            &field.ident,
+            FieldName::parse(&field)
+        );
+
+        return None;
+    }
+
+    pub fn parse_type_path<'a>(field: &'a syn::Field) -> Option<&'a TypePath> {
+        let Type::Path(typath) = &field.ty else {
+            return None;
+        };
+        Some(typath)
     }
 }
 
@@ -207,65 +292,12 @@ impl ToTokens for Id {
 struct CapyField(Vec<Field>);
 
 impl CapyField {
-    pub fn gentype_contains_type(barket: &AngleBracketedGenericArguments) -> bool {
-        for i in &barket.args {
-            if let GenericArgument::Type(_) = i {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub fn gentype_to_vec(barket: &AngleBracketedGenericArguments) -> Vec<String> {
-        barket
-            .args
-            .iter()
-            .filter_map(|f| {
-                let GenericArgument::Type(Type::Path(seg)) = f else {
-                    return None;
-                };
-
-                let Some(ident) = seg.path.get_ident() else {
-                    return None;
-                };
-
-                Some(ident.to_string())
-            })
-            .collect::<Vec<String>>()
-    }
-
-    pub fn new(ident: &Ident, fields: Fields) -> Self {
+    pub fn new(fields: &Fields) -> Self {
         let methods = fields
             .into_iter()
             .filter_map(|f| {
-                let field_name = f.ident.unwrap().to_string();
-                let Type::Path(typath) = f.ty else {
-                    return None;
-                };
-
-                let fieldtype;
-                if let Some(ident) = typath.path.get_ident() {
-                    fieldtype = FType::NonGeneric(ident.to_string());
-                } else if let Some(segment) = typath.path.segments.last() {
-                    let toptype = segment.ident.to_string();
-                    fieldtype = match &segment.arguments {
-                        PathArguments::None => FType::NonGeneric(toptype),
-                        PathArguments::AngleBracketed(gentype) => {
-                            if Self::gentype_contains_type(gentype) {
-                                FType::Generic(toptype, Self::gentype_to_vec(gentype))
-                            } else {
-                                FType::NonGeneric(toptype)
-                            }
-                        }
-                        PathArguments::Parenthesized(_) => {
-                            unimplemented!()
-                        }
-                    }
-                } else {
-                    println!("Error on {ident} | {field_name}");
-                    return None;
-                }
+                let field_name = FieldName::parse(&f)?;
+                let fieldtype = FieldType::parse_ftype(&f)?;
 
                 let attribute_name = f.attrs.first()?.meta.path().get_ident()?.to_string();
 
@@ -326,7 +358,7 @@ pub fn derive_packet(item: TokenStream) -> TokenStream {
     let syn::Data::Struct(DataStruct { fields, .. }) = data else {
         unimplemented!("Derive macro work only on struct")
     };
-    let capyfield = CapyField::new(&ident, fields);
+    let capyfield = CapyField::new(&fields);
     let to_res: IntoResponses = IntoResponses::new(&capyfield);
     let from_bytes: SelfFromBytes = SelfFromBytes::new(&capyfield);
 
