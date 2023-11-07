@@ -1,10 +1,11 @@
-use bevy::{
-    ecs::system::SystemParam,
+use bevy_app::{Plugin, Update};
+use bevy_ecs::{
     prelude::{
-        Commands, Entity, Event, EventReader, EventWriter, IntoSystemConfigs, Plugin, Query, Res,
-        Update, With,
+        Commands, Entity, Event, EventReader, EventWriter, IntoSystemConfigs, Query, Res, With,
     },
+    system::SystemParam,
 };
+
 use capybara_packet::{
     DisconnectPacket, EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket,
     Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, StatusPacket,
@@ -19,7 +20,7 @@ use crate::{
 pub struct PacketEventPlugin;
 
 impl Plugin for PacketEventPlugin {
-    fn build(&self, app: &mut bevy::prelude::App) {
+    fn build(&self, app: &mut bevy_app::App) {
         app.add_event::<PingRequest>()
             .add_event::<Handshake>()
             .add_event::<Login>()

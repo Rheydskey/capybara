@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
-use bevy::prelude::{Bundle, Component};
+use bevy_ecs::prelude::{Bundle, Component};
 use capybara_packet::helper::PacketState;
 use parking_lot::RwLock;
 
@@ -87,7 +87,7 @@ pub struct CompressionState;
 pub struct VerifyToken(pub Vec<u8>);
 
 pub mod PlayerStatusMarker {
-    use bevy::prelude::Component;
+    use bevy_ecs::prelude::Component;
 
     #[derive(Debug, Component)]
     pub struct Handshaking;

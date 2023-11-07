@@ -1,5 +1,5 @@
 use base64::Engine;
-use bevy::prelude::Resource;
+use bevy_ecs::prelude::Resource;
 
 use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey};
 use rsa::{RsaPrivateKey, RsaPublicKey};

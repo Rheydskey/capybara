@@ -1,10 +1,10 @@
 use std::time::SystemTime;
 
-use bevy::prelude::Plugin;
+use bevy_app::Plugin;
 
 pub struct Log;
 impl Plugin for Log {
-    fn build(&self, _: &mut bevy::prelude::App) {
+    fn build(&self, _: &mut bevy_app::App) {
         fern::Dispatch::new()
             .format(|out, message, record| {
                 out.finish(format_args!(

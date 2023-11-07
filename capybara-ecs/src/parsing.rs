@@ -1,8 +1,6 @@
 use anyhow::anyhow;
-use bevy::{
-    prelude::Component,
-    tasks::{AsyncComputeTaskPool, Task},
-};
+use bevy_ecs::prelude::Component;
+use bevy_tasks::{AsyncComputeTaskPool, Task};
 use bytes::{BufMut, Bytes, BytesMut};
 use capybara_packet::{
     capybara_packet_parser::{Parsable, VarInt},

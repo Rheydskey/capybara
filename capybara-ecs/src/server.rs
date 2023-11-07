@@ -1,7 +1,7 @@
-use bevy::prelude::{
-    App, Commands, DespawnRecursiveExt, Entity, IntoSystemConfigs, Plugin, PreUpdate, Query, Res,
-    Resource, SystemSet,
-};
+use bevy_app::{App, Plugin, PreUpdate};
+use bevy_ecs::prelude::{Commands, Entity, IntoSystemConfigs, Query, Res, Resource, SystemSet};
+use bevy_hierarchy::DespawnRecursiveExt;
+
 use std::net::TcpListener;
 
 use capybara_packet::helper::{PacketEnum, PacketState};

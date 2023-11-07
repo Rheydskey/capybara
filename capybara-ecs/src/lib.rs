@@ -7,10 +7,8 @@ mod server;
 
 use crate::logger::Log;
 
-use bevy::{
-    app::{App, ScheduleRunnerPlugin},
-    prelude::TaskPoolPlugin,
-};
+use bevy_app::{App, ScheduleRunnerPlugin};
+use bevy_core::TaskPoolPlugin;
 
 use config::GlobalServerConfig;
 use server::ServerPlugin;
