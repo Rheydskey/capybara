@@ -261,10 +261,10 @@ impl Id {
     ) -> Result<Self, proc_macro2::TokenStream> {
         let ids = attrs
             .iter()
-            .map(|e| e.parse_args::<proc_macro2::TokenStream>().unwrap())
+            .map(|attributes| attributes.parse_args::<proc_macro2::TokenStream>().unwrap())
             .filter_map(|token| token.into_iter().last())
-            .filter_map(|f| {
-                let proc_macro2::TokenTree::Literal(l) = f else {
+            .filter_map(|tokentree| {
+                let proc_macro2::TokenTree::Literal(l) = tokentree else {
                     return None;
                 };
 
