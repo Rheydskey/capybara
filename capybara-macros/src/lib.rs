@@ -113,7 +113,7 @@ impl FieldType {
     }
 
     pub fn parse_ftype(field: &syn::Field) -> Option<FType> {
-        let typath = FieldType::parse_type_path(&field)?;
+        let typath = Self::parse_type_path(field)?;
 
         if let Some(ident) = typath.path.get_ident() {
             return Some(FType::NonGeneric(ident.to_string()));
@@ -140,13 +140,13 @@ impl FieldType {
         println!(
             "Error on {:?} | {:?}",
             &field.ident,
-            FieldName::parse(&field)
+            FieldName::parse(field)
         );
 
-        return None;
+        None
     }
 
-    pub fn parse_type_path<'a>(field: &'a syn::Field) -> Option<&'a TypePath> {
+    pub const fn parse_type_path(field: &syn::Field) -> Option<&TypePath> {
         let Type::Path(typath) = &field.ty else {
             return None;
         };
@@ -296,8 +296,8 @@ impl CapyField {
         let methods = fields
             .into_iter()
             .filter_map(|f| {
-                let field_name = FieldName::parse(&f)?;
-                let fieldtype = FieldType::parse_ftype(&f)?;
+                let field_name = FieldName::parse(f)?;
+                let fieldtype = FieldType::parse_ftype(f)?;
 
                 let attribute_name = f.attrs.first()?.meta.path().get_ident()?.to_string();
 
