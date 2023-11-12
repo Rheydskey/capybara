@@ -3,8 +3,8 @@ resolver = "2"
 members = [
   'capybara',
   "capybara-ecs",
-  'capybara-macros',
   'capybara-packet',
   'capybara-packetparser',
-  'capybara-nbt'
+  'capybara-nbt', 
+  "capybara-packet-serde"
 ]

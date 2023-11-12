@@ -9,6 +9,7 @@ use serde::Serialize;
 use rsa::RsaPrivateKey;
 
 use crate::helper::PacketState;
+use crate::Id;
 use crate::IntoResponse;
 use crate::Packet;
 
@@ -69,7 +70,13 @@ impl RawPacket {
         Ok(packet)
     }
 
-    pub fn build_from_packet(to_send_packet: impl IntoResponse) -> anyhow::Result<Self> {
+    pub fn build_from_serialize(to_send_packet: impl Serialize + Id) -> anyhow::Result<Self> {
+        let a = capybara_packet_serde::to_bytes(&to_send_packet)?;
+        let id = to_send_packet.id();
+        Self::from_bytes(&Bytes::copy_from_slice(a.as_slice()), i32::try_from(id)?)
+    }
+
+    pub fn build_from_packet(to_send_packet: impl IntoResponse + Id) -> anyhow::Result<Self> {
         let packet = Packet::new();
         let id = to_send_packet.id();
         Self::from_bytes(&to_send_packet.to_response(&packet)?, i32::try_from(id)?)

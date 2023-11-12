@@ -36,21 +36,30 @@ impl Parsable for PacketUuid {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        let a = be_u128.parse_next(bytes)?;
-        let uuid = uuid::Uuid::from_u128(a);
+        winnow::trace::trace("uuid", |bytes: &mut I| -> PResult<Self::Target> {
+            let a = be_u128.parse_next(bytes)?;
+            println!("crash");
+            let uuid = uuid::Uuid::from_u128(a);
 
-        Ok(uuid)
+            Ok(uuid)
+        })
+        .parse_next(bytes)
     }
 }
 
 #[macro_export]
 macro_rules! create_var_number {
-    ($n:tt, $t:ty, $max_pos:expr, $parser:expr) => {
-        pub struct $n;
+    ($n:tt, $t:ty, $max_pos:expr, $parser:expr, $visitorname:tt) => {
+        #[derive(Debug, Clone, Default, PartialEq, Eq)]
+        pub struct $n(pub $t);
 
         impl $n {
             const SEGMENT_BITS: $t = 0x7F;
             const CONTINUE_BIT: $t = 0x80;
+
+            fn serde_encode(&self) -> anyhow::Result<Vec<u8>> {
+                Self::encode(self.0)
+            }
 
             pub fn encode(mut value: $t) -> anyhow::Result<Vec<u8>> {
                 let mut buf: Vec<u8> = Vec::new();
@@ -77,33 +86,78 @@ macro_rules! create_var_number {
                 I: StreamIsPartial + Stream<Token = u8>,
                 <I as Stream>::Slice: AsBytes,
             {
-                let mut result = 0;
-                let mut position = 0;
-                loop {
-                    let byte = be_u8.parse_next(bytes)?;
+                winnow::trace::trace("VarInt", |bytes: &mut I| -> PResult<Self::Target> {
+                    let mut result = 0;
+                    let mut position = 0;
 
-                    result |= (<$t>::from(byte) & Self::SEGMENT_BITS) << position;
+                    loop {
+                        let byte = be_u8(bytes)?;
 
-                    position += 7;
+                        result |= (<$t>::from(byte) & Self::SEGMENT_BITS) << position;
 
-                    if position >= $max_pos {
-                        return Err(winnow::error::ErrMode::Cut(
-                            winnow::error::ContextError::new()
-                                .add_context(bytes, winnow::error::StrContext::Label("Too long")),
-                        ));
+                        position += 7;
+
+                        if position >= $max_pos {
+                            return Err(winnow::error::ErrMode::Cut(
+                                winnow::error::ContextError::new().add_context(
+                                    bytes,
+                                    winnow::error::StrContext::Label("Too long"),
+                                ),
+                            ));
+                        }
+
+                        if (<$t>::from(byte) & Self::CONTINUE_BIT) == 0 {
+                            return Ok(result);
+                        }
                     }
+                })
+                .parse_next(bytes)
+            }
+        }
 
-                    if (<$t>::from(byte) & Self::CONTINUE_BIT) == 0 {
-                        return Ok(result);
-                    }
-                }
+        #[derive(Debug)]
+        struct $visitorname;
+
+        impl<'de> serde::de::Visitor<'de> for $visitorname {
+            type Value = $t;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(stringify!($n))
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let mut a = v;
+                Ok($n::parse(&mut a).unwrap())
+            }
+        }
+
+        impl<'de> serde::de::Deserialize<'de> for $n {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                deserializer
+                    .deserialize_enum(stringify!($n), &[], $visitorname)
+                    .map($n)
+            }
+        }
+
+        impl serde::Serialize for $n {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_bytes(&self.serde_encode().unwrap())
             }
         }
     };
 }
 
-crate::create_var_number!(VarLong, i64, 64, be_i64);
-crate::create_var_number!(VarInt, i32, 32, be_i32);
+crate::create_var_number!(VarLong, i64, 64, be_i64, VarLongVisitor);
+crate::create_var_number!(VarInt, i32, 32, be_i32, VarIntVisitor);
 
 pub fn transform_to_string(bytes: &&[u8]) -> PResult<String> {
     let Ok(string) = std::str::from_utf8(bytes) else {
@@ -140,14 +194,19 @@ impl Parsable for PacketString {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        let value = VarInt::parse(bytes)?;
-        let mut take_bytes = take(value.unsigned_abs() as usize);
+        winnow::trace::trace("string", |bytes: &mut I| -> PResult<Self::Target> {
+            println!("Parsing string\n\n\n");
+            let value = VarInt::parse(bytes)?;
+            println!("{:?}", value);
+            let mut take_bytes = take(value.unsigned_abs() as usize);
 
-        let value = take_bytes.parse_next(bytes)?;
+            let value = take_bytes.parse_next(bytes)?;
 
-        let string = transform_to_string(&value.as_bytes())?;
+            let string = transform_to_string(&value.as_bytes())?;
 
-        Ok(string)
+            Ok(string)
+        })
+        .parse_next(bytes)
     }
 }
 
@@ -161,7 +220,7 @@ impl Parsable for PacketBool {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        Ok(be_u8(bytes)? == 0x01)
+        winnow::trace::trace("bool", |bytes: &mut I| Ok(be_u8(bytes)? == 0x01)).parse_next(bytes)
     }
 }
 
@@ -175,10 +234,14 @@ impl Parsable for PacketBytes {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        let length = VarInt::parse(bytes)?;
-        let values = take(length.unsigned_abs() as usize).parse_next(bytes)?;
+        winnow::trace::trace("bytes", |bytes: &mut I| -> PResult<Self::Target> {
+            let length = VarInt::parse(bytes)?;
+            println!("lenght: {length}");
+            let values = take(length.unsigned_abs() as usize).parse_next(bytes)?;
 
-        Ok(values.as_bytes().to_vec())
+            Ok(values.as_bytes().to_vec())
+        })
+        .parse_next(bytes)
     }
 }
 

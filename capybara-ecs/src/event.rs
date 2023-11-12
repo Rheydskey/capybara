@@ -85,7 +85,7 @@ pub fn ping_handler(
             continue;
         };
 
-        if let Err(error) = a.send_packet(PingRequestPacket {
+        if let Err(error) = a.send_packet_serialize(PingRequestPacket {
             value: packet.value,
         }) {
             error!("{error}");
@@ -111,7 +111,7 @@ pub fn handshake_handler(
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Status);
 
-            if let Err(error) = p.send_packet(StatusPacket::default()) {
+            if let Err(error) = p.send_packet_serialize(StatusPacket::default()) {
                 error!("{error}");
             }
         } else if next_state == 2 {
@@ -127,7 +127,7 @@ pub fn handshake_handler(
                 continue;
             };
 
-            if let Err(error) = p.send_packet(packet) {
+            if let Err(error) = p.send_packet_serialize(packet) {
                 info!("{error:?}");
             }
         }
@@ -155,14 +155,14 @@ pub fn login_handler(
                 continue;
             };
 
-            if let Err(error) = task.send_packet(packet) {
+            if let Err(error) = task.send_packet_serialize(packet) {
                 error!("Cannot send the packet: {:?}", error);
             }
 
             continue;
         }
 
-        entity_command.insert(crate::player::Uuid(login.uuid));
+        entity_command.insert(crate::player::Uuid(login.uuid.0));
         entity_command.insert(crate::player::Name(login.name.clone()));
 
         let Ok(to_send) = capybara_packet::EncryptionRequest::new(
@@ -174,9 +174,9 @@ pub fn login_handler(
 
         let token = to_send.verify_token.clone();
         info!("{token:?}");
-        entity_command.insert(VerifyToken(token));
+        entity_command.insert(VerifyToken(token.0));
 
-        if let Err(error) = task.send_packet(to_send) {
+        if let Err(error) = task.send_packet_serialize(to_send) {
             error!("{error}");
         }
     }
@@ -218,7 +218,8 @@ pub fn response_encryption(
 
         command.entity(*entity).remove::<VerifyToken>();
 
-        if let Err(error) = e.send_packet(LoginSuccessPacket::new(name.0.clone(), uuid.0)) {
+        if let Err(error) = e.send_packet_serialize(LoginSuccessPacket::new(name.0.clone(), uuid.0))
+        {
             error!("Cannot send packet for {:?} : {}", entity, error);
         }
     }

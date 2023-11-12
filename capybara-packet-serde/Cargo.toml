@@ -1,0 +1,15 @@
+[package]
+name = "capybara-packet-serde"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dev-dependencies]
+serde = {version = "1", features=["derive"]}
+serde_path_to_error = "0.1"
+
+
+[dependencies]
+serde = "1"
+capybara-packet-parser = { path = "../capybara-packetparser"}
+anyhow = "1"

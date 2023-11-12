@@ -1,6 +1,7 @@
 use bytes::Bytes;
+use capybara_packet_serde::from_bytes;
 
-use crate::{EncryptionResponse, Handshake, Login, PacketError, PacketTrait, PingRequest};
+use crate::{EncryptionResponse, Handshake, Login, PacketError, PingRequest};
 
 /// Return parsed packet
 ///
@@ -11,14 +12,16 @@ pub fn parse_packet(
     state: &PacketState,
     bytes: &Bytes,
 ) -> anyhow::Result<PacketEnum> {
+    println!("{:?}", packetid);
+    println!("{:?}", bytes);
     match packetid {
         0x0 => {
             if matches!(state, PacketState::Handshake) || matches!(state, PacketState::None) {
-                return Ok(PacketEnum::HandShake(Handshake::from_bytes(bytes)?));
+                return Ok(PacketEnum::HandShake(from_bytes::<Handshake>(bytes)?));
             }
 
             if matches!(state, PacketState::Login) {
-                return Ok(PacketEnum::Login(Login::from_bytes(bytes)?));
+                return Ok(PacketEnum::Login(from_bytes::<Login>(bytes)?));
             }
 
             Err(PacketError::CannotParse(-1).into())
@@ -26,12 +29,14 @@ pub fn parse_packet(
 
         0x1 => {
             if matches!(state, PacketState::Status) {
-                return Ok(PacketEnum::PingRequest(PingRequest::from_bytes(bytes)?));
+                return Ok(PacketEnum::PingRequest(
+                    capybara_packet_serde::from_bytes::<PingRequest>(bytes)?,
+                ));
             }
 
-            Ok(PacketEnum::EncryptionResponse(
-                EncryptionResponse::from_bytes(bytes)?,
-            ))
+            Ok(PacketEnum::EncryptionResponse(from_bytes::<
+                EncryptionResponse,
+            >(bytes)?))
         }
 
         _ => Err(PacketError::CannotParse(packetid).into()),

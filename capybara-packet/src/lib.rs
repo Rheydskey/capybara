@@ -1,20 +1,98 @@
 pub use capybara_packet_parser;
+pub use capybara_packet_serde;
+
 pub mod helper;
 pub mod types;
 
-use anyhow::anyhow;
-use bytes::{BufMut, Bytes};
-use capybara_macros::packet;
-use capybara_packet_parser::VarInt;
+use bytes::Bytes;
+use capybara_packet_parser::{PacketUuid, Parsable, VarInt};
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
+use serde::{de::Visitor, ser::SerializeStruct, Deserialize, Serialize};
 use std::{fmt::Debug, str::FromStr};
 use thiserror::Error;
 use types::{Chat, RawPacket, Text};
-use uuid::Uuid;
 
 use crate::helper::parse_packet;
 use helper::{PacketEnum, PacketState};
+
+#[derive(Serialize, Debug, Clone)]
+pub struct Uuid(pub uuid::Uuid);
+
+impl<'de> Deserialize<'de> for Uuid {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct UuidVisitor;
+
+        impl<'de> Visitor<'de> for UuidVisitor {
+            type Value = uuid::Uuid;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("uuid")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let mut a = v;
+                println!("{:?}", a);
+                Ok(PacketUuid::parse(&mut a).unwrap())
+            }
+        }
+
+        deserializer
+            .deserialize_enum("uuid", &[], UuidVisitor)
+            .map(Self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayBytes(pub Vec<u8>);
+
+impl<'de> Deserialize<'de> for ArrayBytes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ArrayBytesVisitor;
+
+        impl<'de> Visitor<'de> for ArrayBytesVisitor {
+            type Value = Vec<u8>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("ArrayBytes")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(v.to_owned())
+            }
+        }
+
+        deserializer
+            .deserialize_enum("arraybytes", &[], ArrayBytesVisitor)
+            .map(Self)
+    }
+}
+
+impl Serialize for ArrayBytes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("", 3)?;
+
+        state.serialize_field("lenght", &VarInt(self.0.len().try_into().unwrap()))?;
+        state.serialize_field("bytes", &self.0)?;
+
+        state.end()
+    }
+}
 
 #[macro_use]
 extern crate log;
@@ -48,45 +126,6 @@ impl Packet {
 
         Ok(())
     }
-
-    /// # Errors
-    /// Return error if cannot encode varint
-    pub fn write(&mut self, packetenum: PacketEnum) -> anyhow::Result<Vec<u8>> {
-        let mut buf = Vec::new();
-
-        buf.append(&mut VarInt::encode(self.packetid)?);
-        match packetenum {
-            PacketEnum::None => Ok(()),
-            PacketEnum::HandShake(Handshake {
-                protocol,
-                address,
-                port,
-                next_state,
-            }) => {
-                buf.append(&mut VarInt::encode(protocol)?);
-                buf.append(&mut address.as_bytes().to_vec());
-                buf.append(&mut port.to_be_bytes().to_vec());
-                buf.push(next_state);
-
-                Ok(())
-            }
-            PacketEnum::Login(Login {
-                name,
-                has_uuid,
-                uuid,
-            }) => {
-                buf.append(&mut VarInt::encode(i32::try_from(name.len())?)?);
-                buf.append(&mut name.as_bytes().to_vec());
-                buf.push(u8::from(has_uuid));
-                buf.append(&mut uuid.to_u128_le().swap_bytes().to_be_bytes().to_vec());
-
-                Ok(())
-            }
-            _ => Err(anyhow!("Cannot write")),
-        }?;
-
-        Ok(buf)
-    }
 }
 
 #[derive(Debug, Error)]
@@ -97,9 +136,19 @@ pub enum PacketError {
     Unknow,
 }
 
-pub trait IntoResponse {
-    fn id(&self) -> usize;
+pub trait Id {
+    const ID: usize;
 
+    fn get_id() -> usize {
+        Self::ID
+    }
+
+    fn id(&self) -> usize {
+        Self::ID
+    }
+}
+
+pub trait IntoResponse {
     fn to_response(self, packet: &Packet) -> anyhow::Result<Bytes>;
 }
 
@@ -111,39 +160,30 @@ pub trait PacketTrait {
         Self: Sized;
 }
 
-#[derive(Debug, Clone, Default, packet)]
-#[id(0x00)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Handshake {
-    #[varint]
-    pub protocol: i32,
-    #[string]
+    pub protocol: VarInt,
     pub address: String,
-    #[u16]
     pub port: u16,
-    #[u8]
     pub next_state: u8,
 }
 
-#[derive(Debug, Clone, packet)]
-#[id(0x00)]
+impl_id!(Handshake, 0x00);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
-    #[string]
     pub name: String,
-    #[bool]
     pub has_uuid: bool,
-    #[uuid]
-    pub uuid: uuid::Uuid,
+    pub uuid: Uuid,
 }
 
-#[derive(Debug, Clone, packet)]
-#[id(0x01)]
+impl_id!(Login, 0x00);
+
+#[derive(Debug, Clone, Serialize)]
 pub struct EncryptionRequest {
-    #[string]
     pub server_id: String,
-    #[arraybytes]
-    pub publickey: Vec<u8>,
-    #[arraybytes]
-    pub verify_token: Vec<u8>,
+    pub publickey: ArrayBytes,
+    pub verify_token: ArrayBytes,
 }
 
 impl EncryptionRequest {
@@ -157,18 +197,17 @@ impl EncryptionRequest {
         info!("token: {token:?}");
         Ok(Self {
             server_id: String::new(),
-            publickey: key,
-            verify_token: token.to_vec(),
+            publickey: ArrayBytes(key),
+            verify_token: ArrayBytes(token.to_vec()),
         })
     }
 }
 
-#[derive(packet, Debug, Clone)]
-#[id(0x01)]
+impl_id!(EncryptionRequest, 0x01);
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct EncryptionResponse {
-    #[arraybytes]
     sharedsecret: Vec<u8>,
-    #[arraybytes]
     verify_token: Vec<u8>,
 }
 
@@ -199,23 +238,21 @@ impl EncryptionResponse {
     }
 }
 
-#[derive(packet)]
-#[id(0x02)]
+impl_id!(EncryptionResponse, 0x01);
+
+#[derive(Debug)]
 pub struct LoginSuccessPacket {
-    #[uuid]
-    uuid: uuid::Uuid,
-    #[string]
+    uuid: Uuid,
     username: String,
-    #[varint]
-    length_properties: i32,
+    length_properties: VarInt,
 }
 
 impl LoginSuccessPacket {
-    pub fn new(username: String, uuid: Uuid) -> Self {
+    pub fn new(username: String, uuid: uuid::Uuid) -> Self {
         Self {
-            uuid,
+            uuid: Uuid(uuid),
             username,
-            length_properties: 0,
+            length_properties: VarInt(0),
         }
     }
 
@@ -224,10 +261,25 @@ impl LoginSuccessPacket {
     }
 }
 
-#[derive(Debug, packet)]
-#[id(0x00)]
+impl_id!(LoginSuccessPacket, 0x02);
+
+impl Serialize for LoginSuccessPacket {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("", 3)?;
+
+        state.serialize_field("uuid", &self.uuid.0.to_bytes_le())?;
+        state.serialize_field("username", &self.username)?;
+        state.serialize_field("lenght_properties", &self.length_properties)?;
+
+        state.end()
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct DisconnectPacket {
-    #[string]
     reason: String,
 }
 
@@ -239,10 +291,10 @@ impl DisconnectPacket {
     }
 }
 
-#[derive(Debug, packet)]
-#[id(0x00)]
+impl_id!(DisconnectPacket, 0x00);
+
+#[derive(Debug, Serialize)]
 pub struct StatusPacket {
-    #[string]
     json_response: String,
 }
 
@@ -278,13 +330,16 @@ impl Default for StatusPacket {
     }
 }
 
-#[derive(packet, Clone, Debug)]
-#[id(0x01)]
+impl_id!(StatusPacket, 0x00);
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PingRequest {
-    #[i64]
     pub value: i64,
 }
 
+impl_id!(PingRequest, 0x01);
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct PlayLogin {
     entity_id: u16,
     is_hardcore: bool,
@@ -296,4 +351,13 @@ pub struct PlayLogin {
     enable_respawn_screen: bool,
     do_limited_crafting: bool,
     dimension_type: String,
+}
+
+#[macro_export]
+macro_rules! impl_id {
+    ($name:ty, $value:expr) => {
+        impl Id for $name {
+            const ID: usize = $value;
+        }
+    };
 }

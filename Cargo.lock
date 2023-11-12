@@ -386,7 +386,6 @@ name = "capybara"
 version = "0.1.0"
 dependencies = [
  "capybara-ecs",
- "capybara-macros",
  "capybara-packet",
  "tokio",
 ]
@@ -421,15 +420,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "capybara-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "capybara-nbt"
 version = "0.1.0"
 dependencies = [
@@ -443,8 +433,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
- "capybara-macros",
  "capybara-packet-parser",
+ "capybara-packet-serde",
  "log",
  "rand",
  "rsa",
@@ -459,8 +449,19 @@ name = "capybara-packet-parser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde",
  "uuid",
  "winnow",
+]
+
+[[package]]
+name = "capybara-packet-serde"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "capybara-packet-parser",
+ "serde",
+ "serde_path_to_error",
 ]
 
 [[package]]
@@ -1230,6 +1231,16 @@ checksum = "6b420ce6e3d8bd882e9b243c6eed35dbc9a6110c9769e74b584e0d68d1f20c65"
 dependencies = [
  "itoa",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serde_path_to_error"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4beec8bce849d58d06238cb50db2e1c417cfeafa4c63f692b15c82b7c80f8335"
+dependencies = [
+ "itoa",
  "serde",
 ]
 
