@@ -66,7 +66,7 @@ impl ParseTask {
         ))
     }
 
-    pub fn send_packet_serialize(&self, packet: impl Serialize + Id) -> anyhow::Result<()> {
+    pub fn send_packet_serialize(&self, packet: &(impl Serialize + Id)) -> anyhow::Result<()> {
         let rawpacket = RawPacket::build_from_serialize(packet)?;
         self.0.send(rawpacket.data)?;
         Ok(())
@@ -173,7 +173,6 @@ impl Reader {
         let Some(lenght) = self.packet.0 else {
             return Err(anyhow!("No lenght"));
         };
-        println!("{:?}", self.packet.1);
         let packet = RawPacket::read_lenght_given(&self.packet.1.clone().freeze(), lenght as i32)?;
 
         self.packet.0 = None;

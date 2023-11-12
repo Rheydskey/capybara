@@ -38,7 +38,6 @@ impl Parsable for PacketUuid {
     {
         winnow::trace::trace("uuid", |bytes: &mut I| -> PResult<Self::Target> {
             let a = be_u128.parse_next(bytes)?;
-            println!("crash");
             let uuid = uuid::Uuid::from_u128(a);
 
             Ok(uuid)
@@ -195,9 +194,8 @@ impl Parsable for PacketString {
         <I as Stream>::Slice: AsBytes,
     {
         winnow::trace::trace("string", |bytes: &mut I| -> PResult<Self::Target> {
-            println!("Parsing string\n\n\n");
             let value = VarInt::parse(bytes)?;
-            println!("{:?}", value);
+
             let mut take_bytes = take(value.unsigned_abs() as usize);
 
             let value = take_bytes.parse_next(bytes)?;
@@ -236,7 +234,6 @@ impl Parsable for PacketBytes {
     {
         winnow::trace::trace("bytes", |bytes: &mut I| -> PResult<Self::Target> {
             let length = VarInt::parse(bytes)?;
-            println!("lenght: {length}");
             let values = take(length.unsigned_abs() as usize).parse_next(bytes)?;
 
             Ok(values.as_bytes().to_vec())

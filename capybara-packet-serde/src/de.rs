@@ -36,7 +36,6 @@ impl<'de> Deserializer<'de> {
     }
 
     pub fn parse_bytes(&mut self) -> crate::Result<Vec<u8>> {
-        println!("{:?}", Bytes::new(self.input));
         Ok(PacketBytes::parse(&mut self.input)?)
     }
 
@@ -71,10 +70,7 @@ where
     T: Deserialize<'a> + std::fmt::Debug,
 {
     let mut deserialize = Deserializer::from_bytes(bytes);
-
-    let t = T::deserialize(&mut deserialize)?;
-    println!("{:?}", t);
-    Ok(t)
+    Ok(T::deserialize(&mut deserialize)?)
 }
 
 impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {

@@ -37,9 +37,8 @@ impl<'de> Deserialize<'de> for Uuid {
             where
                 E: serde::de::Error,
             {
-                let mut a = v;
-                println!("{:?}", a);
-                Ok(PacketUuid::parse(&mut a).unwrap())
+                let mut bytes = v;
+                Ok(PacketUuid::parse(&mut bytes).unwrap())
             }
         }
 
