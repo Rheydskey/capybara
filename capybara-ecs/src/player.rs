@@ -70,7 +70,7 @@ impl EncryptionState {
     }
 
     pub fn set_encryption(&self, encryption_layer: EncryptionLayer) {
-        *self.0.write() = Some(encryption_layer)
+        *self.0.write() = Some(encryption_layer);
     }
 }
 

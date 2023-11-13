@@ -4,7 +4,6 @@ pub use capybara_packet_serde;
 pub mod helper;
 pub mod types;
 
-use bytes::Bytes;
 use capybara_packet_parser::{PacketUuid, Parsable, VarInt};
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
@@ -104,6 +103,7 @@ pub struct Packet {
 }
 
 impl Packet {
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             lenght: 0,
@@ -138,17 +138,10 @@ pub enum PacketError {
 pub trait Id {
     const ID: usize;
 
-    fn get_id() -> usize {
-        Self::ID
-    }
-
+    #[must_use]
     fn id(&self) -> usize {
         Self::ID
     }
-}
-
-pub trait IntoResponse {
-    fn to_response(self, packet: &Packet) -> anyhow::Result<Bytes>;
 }
 
 pub trait PacketTrait {
@@ -247,7 +240,8 @@ pub struct LoginSuccessPacket {
 }
 
 impl LoginSuccessPacket {
-    pub fn new(username: String, uuid: uuid::Uuid) -> Self {
+    #[must_use]
+    pub const fn new(username: String, uuid: uuid::Uuid) -> Self {
         Self {
             uuid: Uuid(uuid),
             username,

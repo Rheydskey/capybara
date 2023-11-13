@@ -18,7 +18,10 @@ use crate::player::{CompressionState, EncryptionState};
 pub struct SharedConnectionState(EncryptionState, CompressionState);
 
 impl SharedConnectionState {
-    pub fn new(encryption_state: EncryptionState, compression_state: CompressionState) -> Self {
+    pub const fn new(
+        encryption_state: EncryptionState,
+        compression_state: CompressionState,
+    ) -> Self {
         Self(encryption_state, compression_state)
     }
 
@@ -41,7 +44,7 @@ pub struct ParseTask(
 
 impl ParseTask {
     pub fn new(
-        stream: TcpStream,
+        stream: &TcpStream,
         encryption: EncryptionState,
         compression: CompressionState,
     ) -> anyhow::Result<Self> {
@@ -54,7 +57,7 @@ impl ParseTask {
         let reader = Reader::new(new_packet_sender, stream.try_clone()?, shared_state.clone());
         let writer = Writer::new(to_send_receiver, stream.try_clone()?, shared_state.clone());
 
-        let recv_task = thread_pool.spawn(async move { reader.run().await });
+        let recv_task = thread_pool.spawn(async move { reader.run() });
         let send_task = thread_pool.spawn(async move { writer.run().await });
 
         Ok(Self(
@@ -101,7 +104,7 @@ impl Writer {
         }
     }
 
-    pub fn send_bytes(&mut self, bytes: Bytes) -> anyhow::Result<()> {
+    pub fn send_bytes(&mut self, bytes: &Bytes) -> anyhow::Result<()> {
         let mut bytes = bytes.to_vec();
 
         self.shared_state
@@ -116,7 +119,7 @@ impl Writer {
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Ok(to_send) = self.to_send.recv_async().await {
             info!("Send {to_send:?}");
-            self.send_bytes(to_send)?;
+            self.send_bytes(&to_send)?;
         }
 
         Err(anyhow!(""))
@@ -173,7 +176,8 @@ impl Reader {
         let Some(lenght) = self.packet.0 else {
             return Err(anyhow!("No lenght"));
         };
-        let packet = RawPacket::read_lenght_given(&self.packet.1.clone().freeze(), lenght as i32)?;
+        let packet =
+            RawPacket::read_lenght_given(&self.packet.1.clone().freeze(), i32::try_from(lenght)?)?;
 
         self.packet.0 = None;
         self.packet.1.clear();
@@ -181,7 +185,7 @@ impl Reader {
         Ok(packet)
     }
 
-    pub async fn run(mut self) -> anyhow::Result<()> {
+    pub fn run(mut self) -> anyhow::Result<()> {
         loop {
             if self.packet.0.is_none() {
                 if let Ok(lenght) = self.read_varint() {
@@ -195,7 +199,7 @@ impl Reader {
 
             if let (Some(lenght), Ok(bytes)) = (self.packet.0, self.read_u8()) {
                 if self.packet.1.len() != lenght {
-                    self.packet.1.put_u8(bytes)
+                    self.packet.1.put_u8(bytes);
                 }
 
                 if self.packet.1.len() == lenght {

@@ -6,12 +6,7 @@ use capybara_packet_parser::VarInt;
 use serde::Deserialize;
 use serde::Serialize;
 
-use rsa::RsaPrivateKey;
-
-use crate::helper::PacketState;
 use crate::Id;
-use crate::IntoResponse;
-use crate::Packet;
 
 #[derive(Debug)]
 pub struct RawPacket {
@@ -52,55 +47,10 @@ impl RawPacket {
         })
     }
 
-    pub fn from_intoresponse(
-        toresponse: impl IntoResponse,
-        packet: &Packet,
-        packetid: i32,
-    ) -> anyhow::Result<Self> {
-        let bytes = toresponse.to_response(packet)?;
-
-        Self::from_bytes(&bytes, packetid)
-    }
-
-    pub fn to_packet(self, player_status: &PacketState) -> anyhow::Result<Packet> {
-        let mut packet = Packet::new();
-
-        packet.parse_from_rawpacket(player_status, &self)?;
-
-        Ok(packet)
-    }
-
     pub fn build_from_serialize(to_send_packet: &(impl Serialize + Id)) -> anyhow::Result<Self> {
         let a = capybara_packet_serde::to_bytes(&to_send_packet)?;
         let id = to_send_packet.id();
         Self::from_bytes(&Bytes::copy_from_slice(a.as_slice()), i32::try_from(id)?)
-    }
-
-    pub fn build_from_packet(to_send_packet: impl IntoResponse + Id) -> anyhow::Result<Self> {
-        let packet = Packet::new();
-        let id = to_send_packet.id();
-        Self::from_bytes(&to_send_packet.to_response(&packet)?, i32::try_from(id)?)
-    }
-}
-
-#[derive(Debug)]
-pub struct State {
-    pub rsa: rsa::RsaPrivateKey,
-}
-
-impl State {
-    #[must_use]
-    pub fn new() -> Self {
-        let mut rng = rand::thread_rng();
-        Self {
-            rsa: RsaPrivateKey::new(&mut rng, 1024).unwrap(),
-        }
-    }
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -129,6 +79,7 @@ pub struct Text {
 }
 
 impl Text {
+    #[must_use]
     pub fn new(str: &str) -> Self {
         Self {
             text: str.to_string(),

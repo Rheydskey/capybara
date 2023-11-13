@@ -62,7 +62,7 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
         let encryption_state = EncryptionState::default();
         let compression_state = CompressionState {};
         let Ok(task) = ParseTask::new(
-            tcpstream,
+            &tcpstream,
             encryption_state.clone(),
             compression_state.clone(),
         ) else {
@@ -87,7 +87,7 @@ pub fn recv_packet(
     mut tasks: Query<(Entity, &ParseTask, &mut PlayerStatus)>,
     mut globalevent: GlobalEventWriter,
 ) {
-    for (entity, i, mut state) in tasks.iter_mut() {
+    for (entity, i, mut state) in &mut tasks {
         for rawpacket in i.get_packet() {
             let mut packet = Packet::new();
 
@@ -126,7 +126,7 @@ pub fn recv_packet(
                         .send(crate::event::EncryptionResponse(entity, encryption.clone()));
                 }
                 PacketEnum::UnknowPacket(packet) => info!("{packet}"),
-                _ => {
+                PacketEnum::None => {
                     info!("{packet:?}");
                 }
             }

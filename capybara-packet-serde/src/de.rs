@@ -1,5 +1,5 @@
 use crate::Error;
-use capybara_packet_parser::winnow::{binary, Bytes};
+use capybara_packet_parser::winnow::binary;
 use capybara_packet_parser::{PacketBytes, PacketString, Parsable, VarInt};
 use serde::de::{MapAccess, SeqAccess};
 use serde::Deserialize;
@@ -69,8 +69,7 @@ pub fn from_bytes<'a, T>(bytes: &'a [u8]) -> crate::Result<T>
 where
     T: Deserialize<'a> + std::fmt::Debug,
 {
-    let mut deserialize = Deserializer::from_bytes(bytes);
-    Ok(T::deserialize(&mut deserialize)?)
+    T::deserialize(&mut Deserializer::from_bytes(bytes))
 }
 
 impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {

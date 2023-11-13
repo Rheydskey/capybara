@@ -38,9 +38,9 @@ impl GlobalServerConfig {
         let config = Self {
             network_config: NetworkConfig {
                 rsa_public: base64::engine::general_purpose::STANDARD
-                    .encode(&pub_key.to_public_key_der().unwrap().as_bytes()),
+                    .encode(pub_key.to_public_key_der().unwrap().as_bytes()),
                 rsa_private: base64::engine::general_purpose::STANDARD
-                    .encode(&priv_key.to_pkcs8_der().unwrap().as_bytes()),
+                    .encode(priv_key.to_pkcs8_der().unwrap().as_bytes()),
                 port: 25565,
             },
             motd_config: MotdConfig {
@@ -50,7 +50,7 @@ impl GlobalServerConfig {
 
         let str_config = toml::to_string(&config).unwrap();
 
-        file.write(str_config.as_bytes()).unwrap();
+        let _ = file.write(str_config.as_bytes()).unwrap();
 
         config
     }
