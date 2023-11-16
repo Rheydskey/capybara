@@ -286,9 +286,64 @@ impl DisconnectPacket {
 
 impl_id!(DisconnectPacket, 0x00);
 
+#[derive(Serialize, Deserialize)]
+pub struct Description {
+    pub text: String,
+}
+#[derive(Serialize, Deserialize)]
+pub struct Player {
+    pub id: String,
+    pub name: String,
+}
+#[derive(Serialize, Deserialize)]
+pub struct Players {
+    pub max: i64,
+    pub online: i64,
+    pub sample: Vec<Player>,
+}
+#[derive(Serialize, Deserialize)]
+pub struct ServerVersion {
+    pub name: String,
+    pub protocol: i64,
+}
+#[derive(Serialize, Deserialize)]
+pub struct ServerStatus {
+    description: Description,
+    enforces_secure_chat: bool,
+    players: Players,
+    previews_chat: bool,
+    version: ServerVersion,
+}
+
+impl ServerStatus {
+    pub fn new(
+        description: Description,
+        enforces_secure_chat: bool,
+        players: Players,
+        previews_chat: bool,
+        version: ServerVersion,
+    ) -> Self {
+        Self {
+            description,
+            enforces_secure_chat,
+            players,
+            previews_chat,
+            version,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct StatusPacket {
     json_response: String,
+}
+
+impl StatusPacket {
+    pub fn from_serializable(a: &impl serde::Serialize) -> Self {
+        Self {
+            json_response: serde_json::to_string(a).unwrap(),
+        }
+    }
 }
 
 impl Default for StatusPacket {

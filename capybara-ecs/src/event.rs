@@ -7,8 +7,9 @@ use bevy_ecs::{
 };
 
 use capybara_packet::{
-    DisconnectPacket, EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket,
-    Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, StatusPacket,
+    Description, DisconnectPacket, EncryptionResponse as EncryptionResponsePacket,
+    Handshake as HandshakePacket, Login as LoginPacket, LoginSuccessPacket,
+    PingRequest as PingRequestPacket, Player, ServerStatus, StatusPacket,
 };
 
 use crate::{
@@ -111,7 +112,27 @@ pub fn handshake_handler(
             entitycommand.remove::<PlayerStatusMarker::Handshaking>();
             entitycommand.insert(PlayerStatusMarker::Status);
 
-            if let Err(error) = p.send_packet_serialize(&StatusPacket::default()) {
+            if let Err(error) =
+                p.send_packet_serialize(&StatusPacket::from_serializable(&ServerStatus::new(
+                    Description {
+                        text: "Capybara Minecraft Server".to_string(),
+                    },
+                    false,
+                    capybara_packet::Players {
+                        max: 10,
+                        online: 1,
+                        sample: vec![Player {
+                            id: "".to_string(),
+                            name: "Rheydskey".to_string(),
+                        }],
+                    },
+                    false,
+                    capybara_packet::ServerVersion {
+                        name: "1.19.4".to_string(),
+                        protocol: 762,
+                    },
+                )))
+            {
                 error!("{error}");
             }
         } else if next_state == 2 {
