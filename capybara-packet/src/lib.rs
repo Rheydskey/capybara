@@ -7,8 +7,8 @@ pub mod types;
 use capybara_packet_parser::{PacketUuid, Parsable, VarInt};
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
-use serde::{de::Visitor, ser::SerializeStruct, Deserialize, Serialize};
-use std::{fmt::Debug, str::FromStr};
+use serde::{de::Visitor, ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use std::{fmt::Debug, marker::PhantomData, str::FromStr};
 use thiserror::Error;
 use types::{Chat, RawPacket, Text};
 
@@ -96,6 +96,45 @@ impl Serialize for ArrayBytes {
         state.serialize_field("bytes", &self.0)?;
 
         state.end()
+    }
+}
+
+#[derive(Debug)]
+pub struct Identifier(capybara_packet_parser::Identifier);
+
+impl Identifier {
+    pub fn new(namespace: String, value: String) -> Self {
+        Self(capybara_packet_parser::Identifier { namespace, value })
+    }
+}
+
+impl ToString for Identifier {
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl<'de> Deserialize<'de> for Identifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value: String = Deserialize::deserialize(deserializer)?;
+        match capybara_packet_parser::Identifier::parse(&mut value.as_bytes()) {
+            Ok(val) => Ok(Self(val)),
+            Err(err) => Err(serde::de::Error::custom(
+                capybara_packet_serde::Error::WinnowError(err),
+            )),
+        }
+    }
+}
+
+impl Serialize for Identifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Serializer::serialize_str(serializer, &self.0.to_string())
     }
 }
 
@@ -396,16 +435,31 @@ impl_id!(PingRequest, 0x01);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct PlayLogin {
-    entity_id: u16,
-    is_hardcore: bool,
-    dimension_count: i32,
-    max_player: i32,
-    view_distance: i32,
-    simulation_distance: i32,
-    reduced_debug_info: bool,
-    enable_respawn_screen: bool,
-    do_limited_crafting: bool,
-    dimension_type: String,
+    pub entity_id: u32,
+    pub is_hardcore: bool,
+    pub gamemode: u8,
+    pub dimension_names: Vec<Identifier>,
+    pub registry_code: PhantomData<()>,
+    pub dimension_type: String,
+    pub dimension_name: String,
+    pub hashed_seed: u64,
+    pub max_player: VarInt,
+    pub view_distance: VarInt,
+    pub simulation_distance: VarInt,
+    pub reduced_debug_info: bool,
+    pub enable_respawn_screen: bool,
+    pub is_debug: bool,
+    pub is_flat: bool,
+    pub death_location: Option<DeathLocation>,
+    pub portal_cooldown: VarInt,
+}
+
+impl_id!(PlayLogin, 0x28);
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct DeathLocation {
+    dimension_name: Identifier,
+    //    location: Location,
 }
 
 #[macro_export]

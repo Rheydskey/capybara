@@ -69,16 +69,6 @@ impl ParseTask {
         ))
     }
 
-    pub fn send_packet_serialize_with_id(
-        &self,
-        id: usize,
-        packet: &(impl Serialize + std::fmt::Debug),
-    ) -> anyhow::Result<()> {
-        let rawpacket = RawPacket::build_from_serialize_with_id(packet, id)?;
-        self.0.send(rawpacket.data)?;
-        Ok(())
-    }
-
     pub fn send_packet_serialize(
         &self,
         packet: &(impl Serialize + Id + std::fmt::Debug),

@@ -335,9 +335,10 @@ impl Parsable for Position {
     }
 }
 
+#[derive(Debug)]
 pub struct Identifier {
-    namespace: String,
-    value: String,
+    pub namespace: String,
+    pub value: String,
 }
 
 impl Parsable for Identifier {
@@ -364,6 +365,12 @@ impl Parsable for Identifier {
         }
 
         Ok(Self { namespace, value })
+    }
+}
+
+impl ToString for Identifier {
+    fn to_string(&self) -> String {
+        format!("{}:{}", self.namespace, self.value)
     }
 }
 

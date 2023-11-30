@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use bevy_app::{Plugin, Update};
 use bevy_ecs::{
     prelude::{
@@ -7,10 +9,12 @@ use bevy_ecs::{
 };
 
 use capybara_packet::{
-    Description, DisconnectPacket, EncryptionResponse as EncryptionResponsePacket,
-    Handshake as HandshakePacket, Login as LoginPacket, LoginSuccessPacket,
-    PingRequest as PingRequestPacket, Player, ServerStatus, StatusPacket,
+    capybara_packet_parser::VarInt, Description, DisconnectPacket,
+    EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket, Identifier,
+    Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, PlayLogin, Player,
+    ServerStatus, StatusPacket,
 };
+use uuid::Uuid;
 
 use crate::{
     config::GlobalServerConfig,
@@ -171,14 +175,36 @@ pub fn login_handler(
         let mut entity_command = command.entity(*entity);
 
         let Some(uuid) = &login.uuid else {
-            let Ok(packet) = DisconnectPacket::from_reason("Be online player plzz") else {
-                info!("Cannot serialize");
-                continue;
-            };
-
-            if let Err(error) = task.send_packet_serialize(&packet) {
-                error!("Cannot send the packet: {:?}", error);
+            // TODO:  Add flag offline player
+            // entity_command.insert()
+            let a = Uuid::from_bytes(*b"OfflinePlayer___");
+            if let Err(error) =
+                task.send_packet_serialize(&LoginSuccessPacket::new(login.name.clone(), a))
+            {
+                error!("Cannot send packet for {:?} : {}", entity, error);
             }
+            let packet = PlayLogin {
+                entity_id: (*entity).index(),
+                is_hardcore: false,
+                gamemode: 0,
+                dimension_names: vec![],
+                registry_code: PhantomData,
+                dimension_type: Identifier::new("minecraft".to_string(), "nether".to_string())
+                    .to_string(),
+                dimension_name: Identifier::new("minecraft".to_string(), "nether".to_string())
+                    .to_string(),
+                hashed_seed: 1427342398478239489,
+                max_player: VarInt(10),
+                view_distance: VarInt(12),
+                simulation_distance: VarInt(12),
+                reduced_debug_info: false,
+                enable_respawn_screen: false,
+                is_debug: true,
+                is_flat: false,
+                death_location: None,
+                portal_cooldown: VarInt(3),
+            };
+            task.send_packet_serialize(&packet).unwrap();
 
             continue;
         };
