@@ -170,7 +170,7 @@ pub fn login_handler(
 
         let mut entity_command = command.entity(*entity);
 
-        if !login.has_uuid {
+        let Some(uuid) = &login.uuid else {
             let Ok(packet) = DisconnectPacket::from_reason("Be online player plzz") else {
                 info!("Cannot serialize");
                 continue;
@@ -181,9 +181,9 @@ pub fn login_handler(
             }
 
             continue;
-        }
+        };
 
-        entity_command.insert(crate::player::Uuid(login.uuid.0));
+        entity_command.insert(crate::player::Uuid(uuid.0));
         entity_command.insert(crate::player::Name(login.name.clone()));
 
         let Ok(to_send) = capybara_packet::EncryptionRequest::new(

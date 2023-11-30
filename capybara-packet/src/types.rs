@@ -47,10 +47,19 @@ impl RawPacket {
         })
     }
 
-    pub fn build_from_serialize(to_send_packet: &(impl Serialize + Id)) -> anyhow::Result<Self> {
+    pub fn build_from_serialize_with_id(
+        to_send_packet: &(impl Serialize + std::fmt::Debug),
+        id: usize,
+    ) -> anyhow::Result<Self> {
+        info!("{} => {to_send_packet:?}", id);
         let a = capybara_packet_serde::to_bytes(&to_send_packet)?;
-        let id = to_send_packet.id();
         Self::from_bytes(&Bytes::copy_from_slice(a.as_slice()), i32::try_from(id)?)
+    }
+
+    pub fn build_from_serialize(
+        to_send_packet: &(impl Serialize + Id + std::fmt::Debug),
+    ) -> anyhow::Result<Self> {
+        Self::build_from_serialize_with_id(to_send_packet, to_send_packet.id())
     }
 }
 

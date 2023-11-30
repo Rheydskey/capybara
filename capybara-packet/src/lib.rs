@@ -37,7 +37,14 @@ impl<'de> Deserialize<'de> for Uuid {
                 E: serde::de::Error,
             {
                 let mut bytes = v;
-                Ok(PacketUuid::parse(&mut bytes).unwrap())
+
+                match PacketUuid::parse(&mut bytes) {
+                    Ok(value) => Ok(value),
+                    Err(err) => {
+                        let error = capybara_packet_serde::Error::WinnowError(err);
+                        Err(serde::de::Error::custom(error))
+                    }
+                }
             }
         }
 
@@ -165,8 +172,7 @@ impl_id!(Handshake, 0x00);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
     pub name: String,
-    pub has_uuid: bool,
-    pub uuid: Uuid,
+    pub uuid: Option<Uuid>,
 }
 
 impl_id!(Login, 0x00);
@@ -241,7 +247,8 @@ pub struct LoginSuccessPacket {
 
 impl LoginSuccessPacket {
     #[must_use]
-    pub const fn new(username: String, uuid: uuid::Uuid) -> Self {
+    pub fn new(username: String, uuid: uuid::Uuid) -> Self {
+        assert!(username.len() <= 16);
         Self {
             uuid: Uuid(uuid),
             username,

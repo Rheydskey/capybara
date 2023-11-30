@@ -69,8 +69,22 @@ impl ParseTask {
         ))
     }
 
-    pub fn send_packet_serialize(&self, packet: &(impl Serialize + Id)) -> anyhow::Result<()> {
+    pub fn send_packet_serialize_with_id(
+        &self,
+        id: usize,
+        packet: &(impl Serialize + std::fmt::Debug),
+    ) -> anyhow::Result<()> {
+        let rawpacket = RawPacket::build_from_serialize_with_id(packet, id)?;
+        self.0.send(rawpacket.data)?;
+        Ok(())
+    }
+
+    pub fn send_packet_serialize(
+        &self,
+        packet: &(impl Serialize + Id + std::fmt::Debug),
+    ) -> anyhow::Result<()> {
         let rawpacket = RawPacket::build_from_serialize(packet)?;
+        info!("{:?}", rawpacket);
         self.0.send(rawpacket.data)?;
         Ok(())
     }
@@ -112,13 +126,11 @@ impl Writer {
             .encrypt(bytes.as_mut_slice());
 
         self.tcp_stream.write_all(bytes.as_slice())?;
-        info!("Sended: {bytes:?}");
         Ok(())
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Ok(to_send) = self.to_send.recv_async().await {
-            info!("Send {to_send:?}");
             self.send_bytes(&to_send)?;
         }
 
@@ -159,12 +171,8 @@ impl Reader {
     pub fn read_varint(&mut self) -> anyhow::Result<i32> {
         let mut buf = Vec::new();
         while let Ok(byte) = self.read_u8() {
-            info!("{:?}", self.packet);
             buf.push(byte);
             if let Ok(value) = VarInt::parse(&mut buf.as_slice()) {
-                if !buf.is_empty() {
-                    warn!("Remaining bytes weird");
-                }
                 return Ok(value);
             }
         }
@@ -181,6 +189,8 @@ impl Reader {
 
         self.packet.0 = None;
         self.packet.1.clear();
+
+        println!("NEW PACKET: {:?}", packet);
 
         Ok(packet)
     }

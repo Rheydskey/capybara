@@ -31,8 +31,7 @@ impl<'de> Deserializer<'de> {
     crate::impl_num!(parse_f64, f64, binary::be_f64);
 
     pub fn parse_str(&mut self) -> crate::Result<String> {
-        let string = PacketString::parse(&mut self.input)?;
-        Ok(string)
+        Ok(PacketString::parse(&mut self.input)?)
     }
 
     pub fn parse_bytes(&mut self) -> crate::Result<Vec<u8>> {

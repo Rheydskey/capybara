@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#capybara-macros= {path = "../capybara-macros"}
 capybara-packet-parser = {path = "../capybara-packetparser"}
 capybara-packet-serde = {path = "../capybara-packet-serde"}
 
