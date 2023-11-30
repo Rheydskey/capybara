@@ -6,11 +6,11 @@ edition = "2021"
 [dependencies]
 flume = "0.11"
 parking_lot = "0.12.1"
-bevy_ecs = {version = "0.12", features=["trace", "multi-threaded"]}
-bevy_app = "0.12.0"
-bevy_tasks = {version = "0.12.0", features=["multi-threaded"]}
-bevy_core = "0.12.0"
-bevy_hierarchy = "0.12.0"
+bevy_ecs = {version = "0.12.1", features=["trace", "multi-threaded"]}
+bevy_app = "0.12.1"
+bevy_tasks = {version = "0.12.1", features=["multi-threaded"]}
+bevy_core = "0.12.1"
+bevy_hierarchy = "0.12.1"
 tokio = {version = "1.33.0", features=["full"]}
 bytes = "1.5.0"
 anyhow = "1.0.75"
