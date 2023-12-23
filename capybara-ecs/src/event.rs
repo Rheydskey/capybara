@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use bevy_app::{Plugin, Update};
 use bevy_ecs::{
     prelude::{
@@ -9,17 +7,15 @@ use bevy_ecs::{
 };
 
 use capybara_packet::{
-    capybara_packet_parser::VarInt, Description, DisconnectPacket,
-    EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket, Identifier,
-    Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, PlayLogin, Player,
+    Description, EncryptionResponse as EncryptionResponsePacket, Handshake as HandshakePacket,
+    Login as LoginPacket, LoginSuccessPacket, PingRequest as PingRequestPacket, Player,
     ServerStatus, StatusPacket,
 };
-use uuid::Uuid;
 
 use crate::{
     config::GlobalServerConfig,
-    parsing::ParseTask,
-    player::{EncryptionLayer, EncryptionState, PlayerStatusMarker, VerifyToken},
+    connection::{parsing::ParseTask, EncryptionLayer, EncryptionState},
+    player::{PlayerStatusMarker, VerifyToken},
 };
 
 pub struct PacketEventPlugin;
@@ -119,7 +115,7 @@ pub fn handshake_handler(
             if let Err(error) =
                 p.send_packet_serialize(&StatusPacket::from_serializable(&ServerStatus::new(
                     Description {
-                        text: "Capybara Minecraft Server".to_string(),
+                        text: "Capybara Server".to_string(),
                     },
                     false,
                     capybara_packet::Players {
@@ -132,8 +128,8 @@ pub fn handshake_handler(
                     },
                     false,
                     capybara_packet::ServerVersion {
-                        name: "1.19.4".to_string(),
-                        protocol: 762,
+                        name: "1.20.4".to_string(),
+                        protocol: 765,
                     },
                 )))
             {
@@ -174,7 +170,7 @@ pub fn login_handler(
 
         let mut entity_command = command.entity(*entity);
 
-        let Some(uuid) = &login.uuid else {
+        /*let Some(uuid) = &login.uuid else {
             // TODO:  Add flag offline player
             // entity_command.insert()
             let a = Uuid::from_bytes(*b"OfflinePlayer___");
@@ -207,9 +203,9 @@ pub fn login_handler(
             task.send_packet_serialize(&packet).unwrap();
 
             continue;
-        };
+        };*/
 
-        entity_command.insert(crate::player::Uuid(uuid.0));
+        entity_command.insert(crate::player::Uuid(login.uuid.0));
         entity_command.insert(crate::player::Name(login.name.clone()));
 
         let Ok(to_send) = capybara_packet::EncryptionRequest::new(

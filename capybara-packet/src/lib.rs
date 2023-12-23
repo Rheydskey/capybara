@@ -1,6 +1,8 @@
 pub use capybara_packet_parser;
 pub use capybara_packet_serde;
 
+pub mod tests;
+
 pub mod helper;
 pub mod types;
 
@@ -211,7 +213,7 @@ impl_id!(Handshake, 0x00);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
     pub name: String,
-    pub uuid: Option<Uuid>,
+    pub uuid: Uuid,
 }
 
 impl_id!(Login, 0x00);
@@ -399,8 +401,8 @@ impl Default for StatusPacket {
                 r#"
 {
     "version": {
-        "name": "1.19.4",
-        "protocol": 762
+        "name": "1.20.4",
+        "protocol": 765
     },
     "players": {
         "max": 100,
@@ -413,9 +415,9 @@ impl Default for StatusPacket {
         ]
     },
     "description": {
-        "text": "Hello world"
+        "text": "Capybara server"
     },
-    "enforcesSecureChat": true,
+    "enforcesSecureChat": false,
     "previewsChat": true
 }
 "#,

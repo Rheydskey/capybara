@@ -12,7 +12,7 @@ use serde::Serialize;
 use std::io::Write;
 use std::{io::Read, net::TcpStream};
 
-use crate::player::{CompressionState, EncryptionState};
+use crate::connection::{CompressionState, EncryptionState};
 
 #[derive(Debug, Clone)]
 pub struct SharedConnectionState(EncryptionState, CompressionState);
@@ -149,12 +149,17 @@ impl Reader {
         }
     }
 
+    pub fn decrypt(&self, decrypt: &mut [u8]) {
+        self.shared_state.get_encryptionlayer().decrypt(decrypt)
+    }
+
     pub fn read_u8(&mut self) -> anyhow::Result<u8> {
         let mut buf = [0; 1];
         self.tcp_stream.read_exact(&mut buf)?;
 
-        self.shared_state.get_encryptionlayer().decrypt(&mut buf);
+        self.decrypt(&mut buf);
 
+        println!("Added {:?}", self.packet);
         Ok(buf[0])
     }
 
@@ -197,13 +202,19 @@ impl Reader {
                 }
             }
 
-            if let (Some(lenght), Ok(bytes)) = (self.packet.0, self.read_u8()) {
-                if self.packet.1.len() != lenght {
+            if let (Some(length), Ok(bytes)) = (self.packet.0, self.read_u8()) {
+                let mut packetbytes = BytesMut::new();
+                packetbytes.put_slice(&VarInt::encode(length as i32).unwrap());
+                packetbytes.put_slice(&self.packet.1);
+                println!("{:?}", &packetbytes);
+
+                if self.packet.1.len() != length {
                     self.packet.1.put_u8(bytes);
                 }
 
-                if self.packet.1.len() == lenght {
+                if self.packet.1.len() == length {
                     let packet = self.try_parse_packet()?;
+
                     self.new_packet.send(packet)?;
                 }
 

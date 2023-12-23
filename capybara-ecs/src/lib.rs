@@ -1,7 +1,7 @@
 mod config;
+mod connection;
 mod event;
 mod logger;
-mod parsing;
 mod player;
 mod server;
 

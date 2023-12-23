@@ -311,7 +311,8 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        println!("{:?}", self.input);
+        Err(Error::Message("Ignored".to_string()))
     }
 }
 

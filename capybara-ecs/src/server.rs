@@ -7,9 +7,9 @@ use std::net::TcpListener;
 use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
 
+use crate::connection::{parsing::ParseTask, CompressionState, EncryptionState};
 use crate::event::{GlobalEventWriter, Handshake, PacketEventPlugin, PingRequest};
-use crate::parsing::ParseTask;
-use crate::player::{CompressionState, EncryptionState, Player, PlayerStatus, PlayerStatusMarker};
+use crate::player::{Player, PlayerStatus, PlayerStatusMarker};
 
 #[derive(Resource)]
 pub struct Listener(pub TcpListener);
