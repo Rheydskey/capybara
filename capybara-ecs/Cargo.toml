@@ -5,20 +5,20 @@ edition = "2021"
 
 [dependencies]
 flume = "0.11"
-parking_lot = "0.12.1"
-bevy_ecs = {version = "0.12.1", features=["trace", "multi-threaded"]}
-bevy_app = "0.12.1"
-bevy_tasks = {version = "0.12.1", features=["multi-threaded"]}
-bevy_core = "0.12.1"
-bevy_hierarchy = "0.12.1"
-tokio = {version = "1.34.0", features=["full"]}
-bytes = "1.5.0"
-anyhow = "1.0.75"
-thiserror = "1.0.50"
-uuid = "1.6.1"
+parking_lot = "0.12.2"
+bevy_ecs = {version = "0.13.2", features=["trace", "multi-threaded"]}
+bevy_app = "0.13.2"
+bevy_tasks = {version = "0.13.2", features=["multi-threaded"]}
+bevy_core = "0.13.2"
+bevy_hierarchy = "0.13.2"
+tokio = {version = "1.37.0", features=["full"]}
+bytes = "1.6.0"
+anyhow = "1"
+thiserror = "1"
+uuid = "1.8.0"
 
 # Log
-log = "0.4.20"
+log = "0.4.21"
 
 fern = "0.6.2"
 humantime = "2.1.0"
@@ -26,12 +26,12 @@ humantime = "2.1.0"
 capybara-packet = { path = '../capybara-packet'}
 
 serde = {version = "1", features=["derive"]}
-toml = "0.8.8"
+toml = "0.8.12"
 
-base64 = "0.21.5"
+base64 = "0.22.1"
 
 # Crypto
 rsa = "0.9.6"
 rand = "0.8.5"
-aes = "0.8.3"
+aes = "0.8.4"
 cfb8 = "0.8.1"

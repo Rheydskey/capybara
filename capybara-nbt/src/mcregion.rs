@@ -2,8 +2,9 @@ use std::io::Read;
 
 use flate2::bufread::ZlibDecoder;
 use winnow::{
-    binary::{be_i32, be_u32, be_u8, length_count},
+    binary::{be_i32, be_u32, be_u8, length_repeat},
     error::{AddContext, ContextError},
+    stream::Stream,
     PResult, Parser,
 };
 
@@ -49,10 +50,10 @@ pub struct Region {
 impl Region {
     pub fn parse(bytes: &mut &[u8]) -> PResult<Self> {
         let locations: Vec<Location> =
-            length_count(|_: &mut _| -> PResult<usize> { Ok(1024) }, Location::parse)
+            length_repeat(|_: &mut _| -> PResult<usize> { Ok(1024) }, Location::parse)
                 .parse_next(bytes)?;
 
-        let timestamps = length_count(
+        let timestamps = length_repeat(
             |_: &mut _| -> PResult<usize> { Ok(1024) },
             Timestamps::parse,
         )
@@ -69,8 +70,7 @@ impl Region {
                 continue;
             }
 
-            let mut chunk_data =
-                &bytes[(*offset - 8192) as usize..(*offset + *size - 8192) as usize];
+            let mut chunk_data = &bytes[(offset - 8192) as usize..(offset + size - 8192) as usize];
 
             chunks.push(Chunk::parse(&mut chunk_data)?);
         }
@@ -104,6 +104,7 @@ impl Chunk {
             return Err(winnow::error::ErrMode::Cut(
                 ContextError::new().add_context(
                     bytes,
+                    &data.checkpoint(),
                     winnow::error::StrContext::Label("Correct zlib arraybytes"),
                 ),
             ));

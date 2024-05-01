@@ -33,6 +33,12 @@ impl PlayerStatus {
 #[derive(Debug, Component, Clone)]
 pub struct VerifyToken(pub Vec<u8>);
 
+impl VerifyToken {
+    pub fn is_eq(&self, bytes: &[u8]) -> bool {
+        self.0.eq(bytes)
+    }
+}
+
 pub mod PlayerStatusMarker {
     use bevy_ecs::prelude::Component;
 

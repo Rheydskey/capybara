@@ -30,9 +30,6 @@ impl SharedConnectionState {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct CompressionLayer;
-
 #[derive(Component)]
 pub struct ParseTask(
     flume::Sender<Bytes>,
@@ -159,7 +156,6 @@ impl Reader {
 
         self.decrypt(&mut buf);
 
-        println!("Added {:?}", self.packet);
         Ok(buf[0])
     }
 
@@ -206,7 +202,6 @@ impl Reader {
                 let mut packetbytes = BytesMut::new();
                 packetbytes.put_slice(&VarInt::encode(length as i32).unwrap());
                 packetbytes.put_slice(&self.packet.1);
-                println!("{:?}", &packetbytes);
 
                 if self.packet.1.len() != length {
                     self.packet.1.put_u8(bytes);

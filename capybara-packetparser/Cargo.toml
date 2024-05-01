@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-winnow = {version = "0.5"}
-uuid = "1.6.1"
+winnow = {version = "0.6.7"}
+uuid = "1.8"
 serde = "1"

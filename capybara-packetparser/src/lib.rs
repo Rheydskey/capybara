@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use winnow::{
     binary::{be_u64, be_u8},
     error::AddContext,
+    stream::Compare,
     token::{take, take_while},
 };
 
@@ -22,7 +23,7 @@ pub trait Parsable {
 
     fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
     where
-        I: StreamIsPartial + Stream<Token = u8>,
+        I: StreamIsPartial + Stream<Token = u8> + Compare<u8>,
         <I as Stream>::Slice: AsBytes;
 }
 
@@ -36,7 +37,7 @@ impl Parsable for PacketUuid {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        winnow::trace::trace("uuid", |bytes: &mut I| -> PResult<Self::Target> {
+        winnow::combinator::trace("uuid", |bytes: &mut I| -> PResult<Self::Target> {
             let a = be_u128.parse_next(bytes)?;
             let uuid = uuid::Uuid::from_u128(a);
 
@@ -85,7 +86,7 @@ macro_rules! create_var_number {
                 I: StreamIsPartial + Stream<Token = u8>,
                 <I as Stream>::Slice: AsBytes,
             {
-                winnow::trace::trace("VarInt", |bytes: &mut I| -> PResult<Self::Target> {
+                winnow::combinator::trace("VarInt", |bytes: &mut I| -> PResult<Self::Target> {
                     let mut result = 0;
                     let mut position = 0;
 
@@ -100,6 +101,7 @@ macro_rules! create_var_number {
                             return Err(winnow::error::ErrMode::Cut(
                                 winnow::error::ContextError::new().add_context(
                                     bytes,
+                                    &bytes.checkpoint(),
                                     winnow::error::StrContext::Label("Too long"),
                                 ),
                             ));
@@ -163,6 +165,7 @@ pub fn transform_to_string(bytes: &&[u8]) -> PResult<String> {
         return Err(winnow::error::ErrMode::Cut(
             winnow::error::ContextError::new().add_context(
                 bytes,
+                &bytes.checkpoint(),
                 winnow::error::StrContext::Label("Cannot convert to String"),
             ),
         ));
@@ -190,10 +193,10 @@ impl Parsable for PacketString {
 
     fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
     where
-        I: StreamIsPartial + Stream<Token = u8>,
+        I: StreamIsPartial + Stream<Token = u8> + Compare<u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        winnow::trace::trace("string", |bytes: &mut I| -> PResult<Self::Target> {
+        winnow::combinator::trace("string", |bytes: &mut I| -> PResult<Self::Target> {
             let value = VarInt::parse(bytes)?;
 
             let mut take_bytes = take(value.unsigned_abs() as usize);
@@ -218,7 +221,8 @@ impl Parsable for PacketBool {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        winnow::trace::trace("bool", |bytes: &mut I| Ok(be_u8(bytes)? == 0x01)).parse_next(bytes)
+        winnow::combinator::trace("bool", |bytes: &mut I| Ok(be_u8(bytes)? == 0x01))
+            .parse_next(bytes)
     }
 }
 
@@ -229,10 +233,10 @@ impl Parsable for PacketBytes {
 
     fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
     where
-        I: StreamIsPartial + Stream<Token = u8>,
+        I: StreamIsPartial + Stream<Token = u8> + Compare<u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        winnow::trace::trace("bytes", |bytes: &mut I| -> PResult<Self::Target> {
+        winnow::combinator::trace("bytes", |bytes: &mut I| -> PResult<Self::Target> {
             let length = VarInt::parse(bytes)?;
             let values = take(length.unsigned_abs() as usize).parse_next(bytes)?;
 
@@ -346,7 +350,7 @@ impl Parsable for Identifier {
 
     fn parse<I>(bytes: &mut I) -> PResult<Self::Target>
     where
-        I: StreamIsPartial + Stream<Token = u8>,
+        I: StreamIsPartial + Stream<Token = u8> + Compare<u8>,
         <I as Stream>::Slice: AsBytes,
     {
         let namespace = take_while(1.., is_namespace_valid).parse_next(bytes)?;

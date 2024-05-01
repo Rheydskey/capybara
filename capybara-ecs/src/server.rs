@@ -25,7 +25,7 @@ impl Plugin for ServerPlugin {
             .configure_sets(
                 PreUpdate,
                 (
-                    ConnexionSet::CleanNetManager,
+                    ConnexionSet::CleanDeadNetwork,
                     ConnexionSet::InsertNewConnection,
                     ConnexionSet::ReadStream,
                 ),
@@ -33,7 +33,7 @@ impl Plugin for ServerPlugin {
             .add_systems(
                 PreUpdate,
                 (
-                    clear_dead_socket.in_set(ConnexionSet::CleanNetManager),
+                    clear_dead_socket.in_set(ConnexionSet::CleanDeadNetwork),
                     recv_connection.in_set(ConnexionSet::InsertNewConnection),
                     recv_packet.in_set(ConnexionSet::ReadStream),
                 ),
@@ -44,7 +44,7 @@ impl Plugin for ServerPlugin {
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum ConnexionSet {
-    CleanNetManager,
+    CleanDeadNetwork,
     InsertNewConnection,
     ReadStream,
 }

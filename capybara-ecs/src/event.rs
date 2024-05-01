@@ -170,41 +170,6 @@ pub fn login_handler(
 
         let mut entity_command = command.entity(*entity);
 
-        /*let Some(uuid) = &login.uuid else {
-            // TODO:  Add flag offline player
-            // entity_command.insert()
-            let a = Uuid::from_bytes(*b"OfflinePlayer___");
-            if let Err(error) =
-                task.send_packet_serialize(&LoginSuccessPacket::new(login.name.clone(), a))
-            {
-                error!("Cannot send packet for {:?} : {}", entity, error);
-            }
-            let packet = PlayLogin {
-                entity_id: (*entity).index(),
-                is_hardcore: false,
-                gamemode: 0,
-                dimension_names: vec![],
-                registry_code: PhantomData,
-                dimension_type: Identifier::new("minecraft".to_string(), "nether".to_string())
-                    .to_string(),
-                dimension_name: Identifier::new("minecraft".to_string(), "nether".to_string())
-                    .to_string(),
-                hashed_seed: 1427342398478239489,
-                max_player: VarInt(10),
-                view_distance: VarInt(12),
-                simulation_distance: VarInt(12),
-                reduced_debug_info: false,
-                enable_respawn_screen: false,
-                is_debug: true,
-                is_flat: false,
-                death_location: None,
-                portal_cooldown: VarInt(3),
-            };
-            task.send_packet_serialize(&packet).unwrap();
-
-            continue;
-        };*/
-
         entity_command.insert(crate::player::Uuid(login.uuid.0));
         entity_command.insert(crate::player::Name(login.name.clone()));
 
@@ -238,8 +203,9 @@ pub fn response_encryption(
     rsa: Res<GlobalServerConfig>,
 ) {
     for EncryptionResponse(entity, response) in responses.read() {
-        info!("{:?}", entity);
-        let Ok((e, a, es, uuid, name)) = parse_task.get_mut(*entity) else {
+        let Ok((parse_task, verify_token, encryption_state, uuid, name)) =
+            parse_task.get_mut(*entity)
+        else {
             info!("No entity for this");
             continue;
         };
@@ -248,7 +214,8 @@ pub fn response_encryption(
             continue;
         };
 
-        if res != a.0 {
+        if !verify_token.is_eq(&res) {
+            error!("Local token != Remove token");
             continue;
         }
 
@@ -257,12 +224,12 @@ pub fn response_encryption(
             continue;
         };
 
-        es.set_encryption(EncryptionLayer::new(&shared_secret));
+        encryption_state.set_encryption(EncryptionLayer::new(&shared_secret));
 
         command.entity(*entity).remove::<VerifyToken>();
 
         if let Err(error) =
-            e.send_packet_serialize(&LoginSuccessPacket::new(name.0.clone(), uuid.0))
+            parse_task.send_packet_serialize(&LoginSuccessPacket::new(name.0.clone(), uuid.0))
         {
             error!("Cannot send packet for {:?} : {}", entity, error);
         }

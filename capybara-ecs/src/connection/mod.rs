@@ -25,17 +25,19 @@ impl EncryptionLayer {
 pub struct EncryptionState(Arc<RwLock<Option<EncryptionLayer>>>);
 
 impl EncryptionState {
+    pub fn read_lock(&self) -> Option<EncryptionLayer> {
+        return self.0.read().clone();
+    }
+
     pub fn encrypt(&self, bytes: &mut [u8]) {
-        let encryption = self.0.read().clone();
-        if let Some(encryption) = encryption {
+        if let Some(encryption) = self.read_lock() {
             info!("Encrypting....");
             encryption.encrypt.encrypt(bytes);
         }
     }
 
     pub fn decrypt(&self, bytes: &mut [u8]) {
-        let decryption = self.0.read().clone();
-        if let Some(decryption) = decryption {
+        if let Some(decryption) = self.read_lock() {
             info!("Decrypting...");
             decryption.decrypt.decrypt(bytes);
         }

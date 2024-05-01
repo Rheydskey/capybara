@@ -11,10 +11,10 @@ capybara-packet-serde = {path = "../capybara-packet-serde"}
 
 serde = {version = "1", features = ["derive"]}
 serde_json = {version = "1"}
-bytes = "1.5.0"
-anyhow = "1.0.75"
-thiserror = "1.0.50"
-uuid = "1.5"
+bytes = "1.6.0"
+anyhow = "1.0.82"
+thiserror = "1.0.59"
+uuid = "1.8.0"
 rsa = "0.9.6"
 rand = "0.8.5"
-log = "0.4.20"
+log = "0.4.21"
