@@ -1,6 +1,6 @@
 mod config;
 mod connection;
-mod event;
+mod events;
 mod logger;
 mod player;
 mod server;
@@ -17,7 +17,9 @@ use std::time::Duration;
 #[macro_use]
 extern crate log;
 
-pub fn init() {
+pub fn init() -> anyhow::Result<()> {
+    let config = GlobalServerConfig::from_file_or_create("./config.toml")?;
+
     App::new()
         .add_plugins(TaskPoolPlugin::default())
         .add_plugins(Log)
@@ -25,6 +27,8 @@ pub fn init() {
             1. / 200.,
         )))
         .add_plugins(ServerPlugin)
-        .insert_resource(GlobalServerConfig::from_file_or_create("./config.toml"))
+        .insert_resource(config)
         .run();
+
+    Ok(())
 }

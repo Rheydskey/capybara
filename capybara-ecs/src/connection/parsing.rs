@@ -31,13 +31,12 @@ impl SharedConnectionState {
 }
 
 #[derive(Component)]
-pub struct ParseTask(
-    flume::Sender<Bytes>,
-    flume::Receiver<RawPacket>,
-    Task<anyhow::Result<()>>,
-    Task<anyhow::Result<()>>,
-    SharedConnectionState,
-);
+pub struct ParseTask {
+    sender: flume::Sender<Bytes>,
+    receiver: flume::Receiver<RawPacket>,
+    reader: Task<anyhow::Result<()>>,
+    writer: Task<anyhow::Result<()>>,
+}
 
 impl ParseTask {
     pub fn new(
@@ -47,42 +46,41 @@ impl ParseTask {
     ) -> anyhow::Result<Self> {
         let thread_pool = AsyncComputeTaskPool::get();
         let shared_state = SharedConnectionState::new(encryption, compression);
-        let (to_send_sender, to_send_receiver) = flume::unbounded();
+        let (sender, to_send_receiver) = flume::unbounded();
 
-        let (new_packet_sender, new_packet_receiver) = flume::unbounded();
+        let (new_packet_sender, receiver) = flume::unbounded();
 
         let reader = Reader::new(new_packet_sender, stream.try_clone()?, shared_state.clone());
-        let writer = Writer::new(to_send_receiver, stream.try_clone()?, shared_state.clone());
+        let writer = Writer::new(to_send_receiver, stream.try_clone()?, shared_state);
 
-        let recv_task = thread_pool.spawn(async move { reader.run() });
-        let send_task = thread_pool.spawn(async move { writer.run().await });
+        let reader = thread_pool.spawn(async move { reader.run() });
+        let writer = thread_pool.spawn(async move { writer.run().await });
 
-        Ok(Self(
-            to_send_sender,
-            new_packet_receiver,
-            recv_task,
-            send_task,
-            shared_state,
-        ))
+        Ok(Self {
+            sender,
+            receiver,
+            reader,
+            writer,
+        })
     }
 
-    pub fn send_packet_serialize(
-        &self,
-        packet: &(impl Serialize + Id + std::fmt::Debug),
-    ) -> anyhow::Result<()> {
+    pub fn send_packet_serialize<P>(&self, packet: &P) -> anyhow::Result<()>
+    where
+        P: Serialize + Id + std::fmt::Debug,
+    {
         let rawpacket = RawPacket::build_from_serialize(packet)?;
         info!("{:?}", rawpacket);
-        self.0.send(rawpacket.data)?;
+        self.sender.send(rawpacket.data)?;
         Ok(())
     }
 
     pub fn get_packet(&self) -> Vec<RawPacket> {
-        self.1.drain().collect::<Vec<RawPacket>>()
+        self.receiver.drain().collect::<Vec<RawPacket>>()
     }
 
     #[inline]
     pub fn is_finished(&self) -> bool {
-        self.2.is_finished() || self.3.is_finished()
+        self.reader.is_finished() || self.writer.is_finished()
     }
 }
 
@@ -108,11 +106,9 @@ impl Writer {
     pub fn send_bytes(&mut self, bytes: &Bytes) -> anyhow::Result<()> {
         let mut bytes = bytes.to_vec();
 
-        self.shared_state
-            .get_encryptionlayer()
-            .encrypt(bytes.as_mut_slice());
+        self.shared_state.get_encryptionlayer().encrypt(&mut bytes);
 
-        self.tcp_stream.write_all(bytes.as_slice())?;
+        self.tcp_stream.write_all(&bytes)?;
         Ok(())
     }
 
@@ -125,10 +121,50 @@ impl Writer {
     }
 }
 
+#[derive(Clone)]
+pub struct BufPacket {
+    length: Option<usize>,
+    data: BytesMut,
+}
+
+impl BufPacket {
+    pub fn new() -> Self {
+        Self {
+            length: None,
+            data: BytesMut::new(),
+        }
+    }
+
+    pub const fn length(&self) -> Option<usize> {
+        self.length
+    }
+
+    pub fn length_i32(&self) -> Option<i32> {
+        self.length.and_then(|f| i32::try_from(f).ok())
+    }
+
+    pub const fn has_length(&self) -> bool {
+        self.length.is_some()
+    }
+
+    pub fn set_length(&mut self, length: i32) {
+        self.length = Some(length.unsigned_abs() as usize);
+        self.data.reserve(self.length.unwrap());
+    }
+
+    pub fn data_length(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn freeze(self) -> Bytes {
+        self.data.freeze()
+    }
+}
+
 pub struct Reader {
     new_packet: flume::Sender<RawPacket>,
     tcp_stream: TcpStream,
-    packet: (Option<usize>, BytesMut),
+    packet: BufPacket,
     shared_state: SharedConnectionState,
 }
 
@@ -142,7 +178,7 @@ impl Reader {
             new_packet,
             tcp_stream,
             shared_state,
-            packet: (None, BytesMut::new()),
+            packet: BufPacket::new(),
         }
     }
 
@@ -172,14 +208,15 @@ impl Reader {
     }
 
     pub fn try_parse_packet(&mut self) -> anyhow::Result<RawPacket> {
-        let Some(lenght) = self.packet.0 else {
-            return Err(anyhow!("No lenght"));
+        let Some(length) = self.packet.length_i32() else {
+            return Err(anyhow!("No length"));
         };
-        let packet =
-            RawPacket::read_lenght_given(&self.packet.1.clone().freeze(), i32::try_from(lenght)?)?;
 
-        self.packet.0 = None;
-        self.packet.1.clear();
+        let data = self.packet.clone().freeze();
+
+        let packet = RawPacket::read_length_given(&data, length)?;
+
+        self.packet = BufPacket::new();
 
         println!("NEW PACKET: {:?}", packet);
 
@@ -188,26 +225,26 @@ impl Reader {
 
     pub fn run(mut self) -> anyhow::Result<()> {
         loop {
-            if self.packet.0.is_none() {
+            if !self.packet.has_length() {
                 if let Ok(lenght) = self.read_varint() {
                     if lenght <= 1 {
                         continue;
                     }
-                    self.packet.0 = Some(lenght.unsigned_abs() as usize);
-                    self.packet.1.reserve(lenght.unsigned_abs() as usize);
+
+                    self.packet.set_length(lenght);
                 }
             }
 
-            if let (Some(length), Ok(bytes)) = (self.packet.0, self.read_u8()) {
+            if let (Some(length), Ok(bytes)) = (self.packet.length(), self.read_u8()) {
                 let mut packetbytes = BytesMut::new();
                 packetbytes.put_slice(&VarInt::encode(length as i32).unwrap());
-                packetbytes.put_slice(&self.packet.1);
+                packetbytes.put_slice(&self.packet.data);
 
-                if self.packet.1.len() != length {
-                    self.packet.1.put_u8(bytes);
+                if self.packet.data_length() != length {
+                    self.packet.data.put_u8(bytes);
                 }
 
-                if self.packet.1.len() == length {
+                if self.packet.data_length() == length {
                     let packet = self.try_parse_packet()?;
 
                     self.new_packet.send(packet)?;

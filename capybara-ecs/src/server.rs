@@ -1,5 +1,5 @@
 use bevy_app::{App, Plugin, PreUpdate};
-use bevy_ecs::prelude::{Commands, Entity, IntoSystemConfigs, Query, Res, Resource, SystemSet};
+use bevy_ecs::prelude::{Commands, Entity, IntoSystemConfigs, Query, Res, Resource};
 use bevy_hierarchy::DespawnRecursiveExt;
 
 use std::net::TcpListener;
@@ -8,8 +8,8 @@ use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
 
 use crate::connection::{parsing::ParseTask, CompressionState, EncryptionState};
-use crate::event::{GlobalEventWriter, Handshake, PacketEventPlugin, PingRequest};
-use crate::player::{Player, PlayerStatus, PlayerStatusMarker};
+use crate::events::{Handshake, PacketEventPlugin, PingRequest};
+use crate::player::{player_status_marker, Player, PlayerStatus};
 
 #[derive(Resource)]
 pub struct Listener(pub TcpListener);
@@ -22,38 +22,21 @@ impl Plugin for ServerPlugin {
         socket.set_nonblocking(true).unwrap();
 
         app.insert_resource(Listener(socket))
-            .configure_sets(
-                PreUpdate,
-                (
-                    ConnexionSet::CleanDeadNetwork,
-                    ConnexionSet::InsertNewConnection,
-                    ConnexionSet::ReadStream,
-                ),
-            )
             .add_systems(
                 PreUpdate,
-                (
-                    clear_dead_socket.in_set(ConnexionSet::CleanDeadNetwork),
-                    recv_connection.in_set(ConnexionSet::InsertNewConnection),
-                    recv_packet.in_set(ConnexionSet::ReadStream),
-                ),
+                (clear_dead_socket, recv_connection, recv_packet).chain(),
             )
             .add_plugins(PacketEventPlugin);
     }
 }
 
-#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-pub enum ConnexionSet {
-    CleanDeadNetwork,
-    InsertNewConnection,
-    ReadStream,
-}
-
 pub fn clear_dead_socket(mut commands: Commands, tasks: Query<(Entity, &ParseTask)>) {
-    for (entity, task) in tasks.iter() {
-        if task.is_finished() {
-            commands.entity(entity).despawn_recursive();
-        }
+    for entity in tasks
+        .iter()
+        .filter(|(_, f)| f.is_finished())
+        .map(|(e, _)| e)
+    {
+        commands.entity(entity).despawn_recursive();
     }
 }
 
@@ -77,7 +60,7 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
             compression_state,
         });
 
-        entity.insert(PlayerStatusMarker::Handshaking);
+        entity.insert(player_status_marker::Handshaking);
 
         info!("Entity {:?}", entity.id());
     }
@@ -85,7 +68,7 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
 
 pub fn recv_packet(
     mut tasks: Query<(Entity, &ParseTask, &mut PlayerStatus)>,
-    mut globalevent: GlobalEventWriter,
+    mut commands: Commands,
 ) {
     for (entity, i, mut state) in &mut tasks {
         for rawpacket in i.get_packet() {
@@ -106,24 +89,22 @@ pub fn recv_packet(
                         state.set_status(PacketState::Login);
                     }
 
-                    globalevent
-                        .handshake_writer()
-                        .send(Handshake(entity, packet.clone()));
+                    commands.entity(entity).insert(Handshake(packet.clone()));
                 }
                 PacketEnum::PingRequest(pingrequest) => {
-                    globalevent
-                        .ping_writer()
-                        .send(PingRequest(entity, pingrequest.clone()));
+                    commands
+                        .entity(entity)
+                        .insert(PingRequest(pingrequest.clone()));
                 }
                 PacketEnum::Login(login) => {
-                    globalevent
-                        .login_writer()
-                        .send(crate::event::Login(entity, login.clone()));
+                    commands
+                        .entity(entity)
+                        .insert(crate::events::Login(login.clone()));
                 }
                 PacketEnum::EncryptionResponse(encryption) => {
-                    globalevent
-                        .encryption_response_writer()
-                        .send(crate::event::EncryptionResponse(entity, encryption.clone()));
+                    commands
+                        .entity(entity)
+                        .insert(crate::events::EncryptionResponse(encryption.clone()));
                 }
                 PacketEnum::UnknowPacket(packet) => info!("{packet}"),
                 PacketEnum::None => {

@@ -39,7 +39,7 @@ impl VerifyToken {
     }
 }
 
-pub mod PlayerStatusMarker {
+pub mod player_status_marker {
     use bevy_ecs::prelude::Component;
 
     #[derive(Debug, Component)]

@@ -16,7 +16,7 @@ pub struct RawPacket {
 }
 
 impl RawPacket {
-    pub fn read_lenght_given(bytes: &[u8], lenght: i32) -> anyhow::Result<Self> {
+    pub fn read_length_given(bytes: &[u8], lenght: i32) -> anyhow::Result<Self> {
         let mut a = bytes;
         let Ok(packetid) = VarInt::parse(&mut a) else {
             return Err(anyhow::anyhow!("Cannot parse varint"));

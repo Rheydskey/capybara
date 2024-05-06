@@ -38,6 +38,10 @@ impl Timestamps {
 
         Ok(Self(timestamp))
     }
+
+    pub fn get_timestamps(&self) -> u32 {
+        self.0
+    }
 }
 
 #[derive(Debug)]
