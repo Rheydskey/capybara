@@ -1,25 +1,18 @@
-use std::time::SystemTime;
-
 use bevy_app::Plugin;
+use tracing::Level;
 
 pub struct Log;
 impl Plugin for Log {
     fn build(&self, _: &mut bevy_app::App) {
-        fern::Dispatch::new()
-            .format(|out, message, record| {
-                out.finish(format_args!(
-                    "[{} {} {}/{}:{}] {}",
-                    humantime::format_rfc3339_seconds(SystemTime::now()),
-                    record.level(),
-                    record.target(),
-                    record.file().unwrap_or("??"),
-                    record.line().unwrap_or(0),
-                    message
-                ));
-            })
-            .level(log::LevelFilter::Trace)
-            .chain(std::io::stdout())
-            .apply()
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .with_max_level(Level::INFO)
+            .finish();
+        // use that subscriber to process traces emitted after this point
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+
+        tracing_log::log_tracer::Builder::new()
+            .with_max_level(log::LevelFilter::Info)
+            .init()
             .unwrap();
     }
 }

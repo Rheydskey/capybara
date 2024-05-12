@@ -2,8 +2,8 @@ use bytes::Bytes;
 use capybara_packet_serde::from_bytes;
 
 use crate::{
-    EncryptionResponse, Handshake, Login, LoginAcknowledged, PacketError, PingRequest,
-    StatusRequest,
+    ClientInformation, ClientboundPluginMessage, EncryptionResponse, FinishConfigAcknowledged,
+    Handshake, Login, LoginAcknowledged, PacketError, PingRequest, StatusRequest,
 };
 
 /// Return parsed packet
@@ -18,37 +18,44 @@ pub fn parse_packet(
     match packetid {
         0x0 => {
             if matches!(state, PacketState::Handshake) || matches!(state, PacketState::None) {
-                return Ok(PacketEnum::HandShake(from_bytes::<Handshake>(bytes)?));
+                return Ok(PacketEnum::HandShake(from_bytes(bytes)?));
             }
 
             if matches!(state, PacketState::Status) {
-                return Ok(PacketEnum::StatusRequest(from_bytes::<StatusRequest>(
-                    bytes,
-                )?));
+                return Ok(PacketEnum::StatusRequest(from_bytes(bytes)?));
             }
 
             if matches!(state, PacketState::Login) {
-                return Ok(PacketEnum::Login(from_bytes::<Login>(bytes)?));
+                return Ok(PacketEnum::Login(from_bytes(bytes)?));
+            }
+
+            if matches!(state, PacketState::Configuration) {
+                return Ok(PacketEnum::ClientInformation(from_bytes(bytes)?));
             }
         }
 
         0x1 => {
             if matches!(state, PacketState::Status) {
-                return Ok(PacketEnum::PingRequest(
-                    capybara_packet_serde::from_bytes::<PingRequest>(bytes)?,
-                ));
+                return Ok(PacketEnum::PingRequest(capybara_packet_serde::from_bytes(
+                    bytes,
+                )?));
             }
 
             if matches!(state, PacketState::Login) {
-                return Ok(PacketEnum::EncryptionResponse(from_bytes::<
-                    EncryptionResponse,
-                >(bytes)?));
+                return Ok(PacketEnum::EncryptionResponse(from_bytes(bytes)?));
             }
+
+            if matches!(state, PacketState::Configuration) {
+                return Ok(PacketEnum::ClientboundPluginMessage(from_bytes(bytes)?));
+            }
+        }
+        0x2 if matches!(state, PacketState::Configuration) => {
+            return Ok(PacketEnum::FinishConfigAcknowledged(from_bytes(bytes)?))
         }
         0x3 => {
             if matches!(state, PacketState::Login) {
                 return Ok(PacketEnum::LoginAcknowledged(
-                    capybara_packet_serde::from_bytes::<LoginAcknowledged>(bytes)?,
+                    capybara_packet_serde::from_bytes(bytes)?,
                 ));
             }
         }
@@ -68,6 +75,9 @@ pub enum PacketEnum {
     EncryptionResponse(EncryptionResponse),
     PingRequest(PingRequest),
     LoginAcknowledged(LoginAcknowledged),
+    ClientboundPluginMessage(ClientboundPluginMessage),
+    ClientInformation(ClientInformation),
+    FinishConfigAcknowledged(FinishConfigAcknowledged),
     UnknowPacket(String),
 }
 

@@ -97,15 +97,26 @@ pub fn recv_packet(
                 PacketEnum::EncryptionResponse(encryption) => {
                     commands.entity(entity).insert(encryption.clone());
                 }
-                PacketEnum::UnknowPacket(packet) => info!("{packet}"),
-                PacketEnum::None => {
-                    info!("{packet:?}");
-                }
                 PacketEnum::StatusRequest(status) => {
                     commands.entity(entity).insert(status.clone());
                 }
                 PacketEnum::LoginAcknowledged(loginack) => {
                     commands.entity(entity).insert(loginack.clone());
+                    state.set_status(PacketState::Configuration);
+                }
+                PacketEnum::ClientInformation(packet) => {
+                    commands.entity(entity).insert(packet.clone());
+                }
+                PacketEnum::ClientboundPluginMessage(packet) => {
+                    commands.entity(entity).insert(packet.clone());
+                }
+                PacketEnum::FinishConfigAcknowledged(packet) => {
+                    commands.entity(entity).insert(packet.clone());
+                    state.set_status(PacketState::Play);
+                }
+                PacketEnum::UnknowPacket(packet) => info!("{packet}"),
+                PacketEnum::None => {
+                    info!("{packet:?}");
                 }
             }
         }

@@ -24,8 +24,7 @@ pub fn init() -> anyhow::Result<()> {
     let config = GlobalServerConfig::from_file_or_create("./config.toml")?;
     App::new()
         .add_plugins(TaskPoolPlugin::default())
-        .add_plugins(bevy_log::LogPlugin::default())
-        // .add_plugins(Log)
+        .add_plugins(Log)
         .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
             1. / 200.,
         )))

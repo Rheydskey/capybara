@@ -65,7 +65,7 @@ impl NetworkTask {
         let parse_task = ParseTask::new(shared_buffer, new_packet_sender, is_close.clone());
         let writer = Writer::new(to_send_receiver, write_half, shared_state);
 
-        let parse_task = thread_pool.spawn(async move { parse_task.run().await });
+        let parse_task = thread_pool.spawn(async move { parse_task.run() });
         let reader = thread_pool.spawn(async move {
             let close = reader.run().await;
             is_close.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -179,13 +179,14 @@ impl ParseTask {
         buf.advance(cnt);
 
         let data = buf.split_to(length as usize).freeze();
+        drop(buf);
 
         let packet = RawPacket::read_length_given(data.as_ref(), length)?;
         warn!("NEW PACKET: {:X?}", packet);
         Ok(Some(packet))
     }
 
-    pub async fn run(mut self) -> anyhow::Result<()> {
+    pub fn run(mut self) -> anyhow::Result<()> {
         loop {
             if self.is_closed.load(std::sync::atomic::Ordering::Relaxed) {
                 return Ok(());

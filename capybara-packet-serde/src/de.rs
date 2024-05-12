@@ -295,7 +295,7 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
             return visitor.visit_bytes(self.parse_read_uuid()?);
         }
 
-        Err(Error::Message("Unknown variant".to_string()))
+        Err(Error::Message(format!("Unknown variant {}", name)))
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>

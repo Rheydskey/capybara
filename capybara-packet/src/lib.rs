@@ -483,3 +483,35 @@ impl_id!(StatusRequest, 0x0);
 pub struct LoginAcknowledged;
 
 impl_id!(LoginAcknowledged, 0x3);
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
+pub struct ClientboundPluginMessage {
+    pub channel: String,
+    pub data: Vec<u8>,
+}
+
+impl_id!(ClientboundPluginMessage, 0x1);
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
+pub struct ClientInformation {
+    locale: String,
+    view_distance: u8,
+    chat_mode: VarInt,
+    chat_color: bool,
+    displayed_skin: u8,
+    main_hand: VarInt,
+    enable_text_filtering: bool,
+    allow_server_listing: bool,
+}
+
+impl_id!(ClientInformation, 0x0);
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
+pub struct FinishConfiguration;
+
+impl_id!(FinishConfiguration, 0x2);
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
+pub struct FinishConfigAcknowledged;
+
+impl_id!(FinishConfigAcknowledged, 0x2);

@@ -1,3 +1,4 @@
+mod configuration;
 mod encryption;
 mod handshake;
 mod login;
@@ -19,6 +20,9 @@ impl Plugin for PacketEventPlugin {
                 login::login_handler,
                 encryption::response_encryption,
                 login::login_ack,
+                configuration::client_information,
+                configuration::config_plugin,
+                configuration::finish_config,
             )
                 .chain(),
         );

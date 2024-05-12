@@ -31,13 +31,8 @@ impl EncryptionLayer {
 pub struct EncryptionState(Arc<RwLock<Option<EncryptionLayer>>>);
 
 impl EncryptionState {
-    // pub fn read_lock(&self) -> Option<EncryptionLayer> {
-    //     return self.0.read().clone();
-    // }
-
     pub fn encrypt(&self, bytes: &mut [u8]) {
-        let mut lock = self.0.write();
-        if let Some(encryption) = &mut *lock {
+        if let Some(encryption) = &mut *self.0.write() {
             info!("Encrypting....");
 
             let cipher = &mut encryption.encrypt;
@@ -49,8 +44,7 @@ impl EncryptionState {
     }
 
     pub fn decrypt(&self, bytes: &mut [u8]) -> anyhow::Result<()> {
-        let mut lock = self.0.write();
-        if let Some(decryption) = &mut *lock {
+        if let Some(decryption) = &mut *self.0.write() {
             let cipher = &mut decryption.decrypt;
             for chunk in bytes.chunks_mut(Decryptor::block_size()) {
                 let gen_arr = GenericArray::from_mut_slice(chunk);

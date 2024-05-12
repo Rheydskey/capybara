@@ -40,7 +40,7 @@ pub fn login_handler(
 }
 
 pub fn login_ack(mut command: Commands, loginacks: Query<(Entity, &LoginAcknowledged)>) {
-    for (entity, acks) in loginacks.iter() {
+    for (entity, _) in loginacks.iter() {
         let mut entity_command = command.entity(entity);
         entity_command.remove::<player_status_marker::Login>();
         entity_command.insert(player_status_marker::Configuration);
