@@ -211,11 +211,11 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
         todo!()
     }
 
-    fn deserialize_unit_struct<V>(self, _: &'static str, _: V) -> Result<V::Value, Self::Error>
+    fn deserialize_unit_struct<V>(self, _: &'static str, v: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        v.visit_unit()
     }
 
     fn deserialize_newtype_struct<V>(

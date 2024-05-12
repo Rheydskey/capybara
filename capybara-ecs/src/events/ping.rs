@@ -1,21 +1,19 @@
+use crate::{connection::parsing::NetworkTask, player::player_status_marker};
 use bevy_ecs::{
     entity::Entity,
     query::With,
     system::{Commands, Query},
 };
 
-use crate::{connection::parsing::ParseTask, player::player_status_marker};
-
-use super::PingRequest;
-use capybara_packet::PingRequest as PingRequestPacket;
+use capybara_packet::PingRequest;
 
 pub fn ping_handler(
-    parse_task: Query<(Entity, &ParseTask, &PingRequest), With<player_status_marker::Status>>,
+    parse_task: Query<(Entity, &NetworkTask, &PingRequest), With<player_status_marker::Status>>,
     mut command: Commands,
 ) {
     for (entity, parse, packet) in parse_task.iter() {
-        if let Err(error) = parse.send_packet_serialize(&PingRequestPacket {
-            value: packet.0.value,
+        if let Err(error) = parse.send_packet_serialize(&PingRequest {
+            value: packet.value,
         }) {
             error!("{error}");
         }

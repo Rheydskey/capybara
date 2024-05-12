@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::{Bundle, Component};
 use capybara_packet::helper::PacketState;
 
-use crate::connection::{parsing::ParseTask, CompressionState, EncryptionState};
+use crate::connection::{parsing::NetworkTask, CompressionState, EncryptionState};
 
 #[derive(Debug, Component)]
 pub struct Name(pub String);
@@ -11,7 +11,7 @@ pub struct Uuid(pub uuid::Uuid);
 
 #[derive(Bundle)]
 pub struct Player {
-    pub event: ParseTask,
+    pub event: NetworkTask,
     pub player_status: PlayerStatus,
     pub encryption_state: EncryptionState,
     pub compression_state: CompressionState,

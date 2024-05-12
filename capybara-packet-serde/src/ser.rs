@@ -57,7 +57,7 @@ impl<'a> serde::ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> std::result::Result<Self::Ok, Self::Error> {
-        self.push(u8::from(v))
+        self.insert(&u8::from(v).to_be_bytes())
     }
 
     fn serialize_i8(self, v: i8) -> std::result::Result<Self::Ok, Self::Error> {
@@ -107,11 +107,13 @@ impl<'a> serde::ser::Serializer for &'a mut Serializer {
     fn serialize_str(self, v: &str) -> std::result::Result<Self::Ok, Self::Error> {
         let varint = VarInt::encode(i32::try_from(v.len())?)?;
         self.insert(&varint)?;
-        self.insert(v.as_bytes())
+
+        self.serialize_bytes(v.as_bytes())
     }
 
     fn serialize_bytes(self, v: &[u8]) -> std::result::Result<Self::Ok, Self::Error> {
-        self.insert(v)
+        let as_be = v.iter().map(|f| f.to_be()).collect::<Vec<u8>>();
+        self.insert(&as_be)
     }
 
     fn serialize_none(self) -> std::result::Result<Self::Ok, Self::Error> {

@@ -2,22 +2,20 @@ use bevy_ecs::{
     entity::Entity,
     system::{Commands, Query, Res},
 };
-use capybara_packet::LoginSuccessPacket;
+use capybara_packet::{EncryptionResponse, LoginSuccessPacket};
 
 use crate::{
     config::GlobalServerConfig,
-    connection::{parsing::ParseTask, EncryptionLayer, EncryptionState},
+    connection::{parsing::NetworkTask, EncryptionLayer, EncryptionState},
     player::VerifyToken,
 };
-
-use super::EncryptionResponse;
 
 pub fn response_encryption(
     mut command: Commands,
     responses: Query<(
         Entity,
         &EncryptionResponse,
-        &ParseTask,
+        &NetworkTask,
         &VerifyToken,
         &mut EncryptionState,
         &crate::player::Uuid,
@@ -25,21 +23,20 @@ pub fn response_encryption(
     )>,
     rsa: Res<GlobalServerConfig>,
 ) {
-    for (entity, response, parse_task, verify_token, encryption_state, uuid, name) in
-        responses.iter()
+    for (entity, packet, parse_task, verify_token, encryption_state, uuid, name) in responses.iter()
     {
         let rsa_key = rsa.network_config.get_privkey();
 
-        let Ok(res) = response.0.decrypt_verify_token(&rsa_key) else {
+        let Ok(res) = packet.decrypt_verify_token(&rsa_key) else {
             continue;
         };
 
         if !verify_token.is_eq(&res) {
-            error!("Local token != Remove token");
+            error!("Local token != Remote token");
             continue;
         }
 
-        let Ok(shared_secret) = response.0.decrypt_shared_secret(&rsa_key) else {
+        let Ok(shared_secret) = packet.decrypt_shared_secret(&rsa_key) else {
             info!("Error");
             continue;
         };

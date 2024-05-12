@@ -1,4 +1,3 @@
-#[tokio::main]
-async fn main() {
+fn main() {
     capybara_ecs::init().unwrap();
 }

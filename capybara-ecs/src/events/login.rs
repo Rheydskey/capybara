@@ -2,23 +2,23 @@ use bevy_ecs::{
     entity::Entity,
     system::{Commands, Query, Res},
 };
+use capybara_packet::{Login, LoginAcknowledged};
 
-use crate::{config::GlobalServerConfig, connection::parsing::ParseTask, player::VerifyToken};
-
-use super::Login;
+use crate::{
+    config::GlobalServerConfig,
+    connection::parsing::NetworkTask,
+    player::{player_status_marker, VerifyToken},
+};
 
 pub fn login_handler(
     mut command: Commands,
-    logins: Query<(Entity, &Login, &ParseTask)>,
+    logins: Query<(Entity, &Login, &NetworkTask)>,
     rsa: Res<GlobalServerConfig>,
 ) {
-    for (entity, login, parse_task) in logins.iter() {
-        info!("Login for {entity:?}");
-
+    for (entity, packet, parse_task) in logins.iter() {
         let mut entity_command = command.entity(entity);
-
-        entity_command.insert(crate::player::Uuid(login.0.uuid.0));
-        entity_command.insert(crate::player::Name(login.0.name.clone()));
+        entity_command.insert(crate::player::Uuid(packet.uuid.0));
+        entity_command.insert(crate::player::Name(packet.name.clone()));
 
         let Ok(to_send) = capybara_packet::EncryptionRequest::new(
             &rsa.network_config.get_privkey().to_public_key(),
@@ -28,7 +28,7 @@ pub fn login_handler(
         };
 
         let token = to_send.verify_token.clone();
-        info!("{token:?}");
+
         entity_command.insert(VerifyToken(token.0));
 
         if let Err(error) = parse_task.send_packet_serialize(&to_send) {
@@ -36,5 +36,15 @@ pub fn login_handler(
         }
 
         entity_command.remove::<Login>();
+    }
+}
+
+pub fn login_ack(mut command: Commands, loginacks: Query<(Entity, &LoginAcknowledged)>) {
+    for (entity, acks) in loginacks.iter() {
+        let mut entity_command = command.entity(entity);
+        entity_command.remove::<player_status_marker::Login>();
+        entity_command.insert(player_status_marker::Configuration);
+        info!("{:?} is now in configuration mode", entity);
+        entity_command.remove::<LoginAcknowledged>();
     }
 }

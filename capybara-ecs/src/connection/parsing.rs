@@ -1,16 +1,20 @@
+use std::sync::{atomic::AtomicBool, Arc};
+
 use anyhow::anyhow;
 use bevy_ecs::prelude::Component;
 use bevy_tasks::{AsyncComputeTaskPool, Task};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use capybara_packet::{
     capybara_packet_parser::{Parsable, VarInt},
     types::RawPacket,
     Id,
 };
-
+use parking_lot::RwLock;
 use serde::Serialize;
-use std::io::Write;
-use std::{io::Read, net::TcpStream};
+use smol::{
+    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    net::TcpStream,
+};
 
 use crate::connection::{CompressionState, EncryptionState};
 
@@ -31,16 +35,17 @@ impl SharedConnectionState {
 }
 
 #[derive(Component)]
-pub struct ParseTask {
+pub struct NetworkTask {
     sender: flume::Sender<Bytes>,
     receiver: flume::Receiver<RawPacket>,
     reader: Task<anyhow::Result<()>>,
     writer: Task<anyhow::Result<()>>,
+    parse_task: Task<anyhow::Result<()>>,
 }
 
-impl ParseTask {
+impl NetworkTask {
     pub fn new(
-        stream: &TcpStream,
+        stream: std::net::TcpStream,
         encryption: EncryptionState,
         compression: CompressionState,
     ) -> anyhow::Result<Self> {
@@ -49,11 +54,23 @@ impl ParseTask {
         let (sender, to_send_receiver) = flume::unbounded();
 
         let (new_packet_sender, receiver) = flume::unbounded();
+        let stream = TcpStream::try_from(stream)?;
 
-        let reader = Reader::new(new_packet_sender, stream.try_clone()?, shared_state.clone());
-        let writer = Writer::new(to_send_receiver, stream.try_clone()?, shared_state);
+        let (read_half, write_half) = smol::io::split(stream);
 
-        let reader = thread_pool.spawn(async move { reader.run() });
+        let shared_buffer = SharedBuffer::new(RwLock::new(BytesMut::new()));
+
+        let is_close = Arc::new(AtomicBool::new(false));
+        let reader = Reader::new(shared_buffer.clone(), read_half, shared_state.clone());
+        let parse_task = ParseTask::new(shared_buffer, new_packet_sender, is_close.clone());
+        let writer = Writer::new(to_send_receiver, write_half, shared_state);
+
+        let parse_task = thread_pool.spawn(async move { parse_task.run().await });
+        let reader = thread_pool.spawn(async move {
+            let close = reader.run().await;
+            is_close.store(true, std::sync::atomic::Ordering::SeqCst);
+            close
+        });
         let writer = thread_pool.spawn(async move { writer.run().await });
 
         Ok(Self {
@@ -61,6 +78,7 @@ impl ParseTask {
             receiver,
             reader,
             writer,
+            parse_task,
         })
     }
 
@@ -69,7 +87,7 @@ impl ParseTask {
         P: Serialize + Id + std::fmt::Debug,
     {
         let rawpacket = RawPacket::build_from_serialize(packet)?;
-        info!("{:?}", rawpacket);
+        info!("{:?} => {:?}", packet, rawpacket);
         self.sender.send(rawpacket.data)?;
         Ok(())
     }
@@ -80,20 +98,20 @@ impl ParseTask {
 
     #[inline]
     pub fn is_finished(&self) -> bool {
-        self.reader.is_finished() || self.writer.is_finished()
+        self.parse_task.is_finished() || self.reader.is_finished() || self.writer.is_finished()
     }
 }
 
 pub struct Writer {
     to_send: flume::Receiver<Bytes>,
-    tcp_stream: TcpStream,
+    tcp_stream: WriteHalf<TcpStream>,
     shared_state: SharedConnectionState,
 }
 
 impl Writer {
     pub fn new(
         to_send: flume::Receiver<Bytes>,
-        tcp_stream: TcpStream,
+        tcp_stream: WriteHalf<TcpStream>,
         shared_state: SharedConnectionState,
     ) -> Self {
         Self {
@@ -103,157 +121,140 @@ impl Writer {
         }
     }
 
-    pub fn send_bytes(&mut self, bytes: &Bytes) -> anyhow::Result<()> {
+    pub async fn send_bytes(&mut self, bytes: &Bytes) -> anyhow::Result<()> {
         let mut bytes = bytes.to_vec();
-
         self.shared_state.get_encryptionlayer().encrypt(&mut bytes);
-
-        self.tcp_stream.write_all(&bytes)?;
+        self.tcp_stream.write_all(&bytes).await.unwrap();
         Ok(())
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Ok(to_send) = self.to_send.recv_async().await {
-            self.send_bytes(&to_send)?;
+            self.send_bytes(&to_send).await?;
         }
 
         Err(anyhow!(""))
     }
 }
 
-#[derive(Clone)]
-pub struct BufPacket {
-    length: Option<usize>,
-    data: BytesMut,
+type SharedBuffer = Arc<RwLock<BytesMut>>;
+
+pub struct ParseTask {
+    buffer: SharedBuffer,
+    new_packet: flume::Sender<RawPacket>,
+    is_closed: Arc<AtomicBool>,
 }
 
-impl BufPacket {
-    pub fn new() -> Self {
+impl ParseTask {
+    pub fn new(
+        buffer: SharedBuffer,
+        new_packet: flume::Sender<RawPacket>,
+        is_closed: Arc<AtomicBool>,
+    ) -> Self {
         Self {
-            length: None,
-            data: BytesMut::new(),
+            buffer,
+            new_packet,
+            is_closed,
         }
     }
 
-    pub const fn length(&self) -> Option<usize> {
-        self.length
+    pub fn try_next_packet(&mut self) -> anyhow::Result<Option<RawPacket>> {
+        let mut buf = self.buffer.write();
+        let buffer = &mut &buf[..];
+
+        let Ok(length) = VarInt::parse(buffer) else {
+            return Ok(None);
+        };
+
+        // info!("{length:?}");
+
+        if buffer.len() < length as usize {
+            return Ok(None);
+        }
+
+        // Calculate number of bytes read for length of packet
+        let cnt = buf.len() - buffer.len();
+
+        // Advance of this size
+        buf.advance(cnt);
+
+        let data = buf.split_to(length as usize).freeze();
+
+        let packet = RawPacket::read_length_given(data.as_ref(), length)?;
+        warn!("NEW PACKET: {:X?}", packet);
+        Ok(Some(packet))
     }
 
-    pub fn length_i32(&self) -> Option<i32> {
-        self.length.and_then(|f| i32::try_from(f).ok())
-    }
+    pub async fn run(mut self) -> anyhow::Result<()> {
+        loop {
+            if self.is_closed.load(std::sync::atomic::Ordering::Relaxed) {
+                return Ok(());
+            }
 
-    pub const fn has_length(&self) -> bool {
-        self.length.is_some()
-    }
-
-    pub fn set_length(&mut self, length: i32) {
-        self.length = Some(length.unsigned_abs() as usize);
-        self.data.reserve(self.length.unwrap());
-    }
-
-    pub fn data_length(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn freeze(self) -> Bytes {
-        self.data.freeze()
+            if let Some(packet) = self.try_next_packet().unwrap() {
+                self.new_packet.send(packet)?;
+            }
+        }
     }
 }
 
 pub struct Reader {
-    new_packet: flume::Sender<RawPacket>,
-    tcp_stream: TcpStream,
-    packet: BufPacket,
+    tcp_stream: ReadHalf<TcpStream>,
+    buffer: SharedBuffer,
     shared_state: SharedConnectionState,
+    is_encrypted: bool,
 }
 
 impl Reader {
     pub fn new(
-        new_packet: flume::Sender<RawPacket>,
-        tcp_stream: TcpStream,
+        buffer: SharedBuffer,
+        tcp_stream: ReadHalf<TcpStream>,
         shared_state: SharedConnectionState,
     ) -> Self {
         Self {
-            new_packet,
             tcp_stream,
             shared_state,
-            packet: BufPacket::new(),
+            buffer,
+            is_encrypted: false,
         }
     }
 
     pub fn decrypt(&self, decrypt: &mut [u8]) {
-        self.shared_state.get_encryptionlayer().decrypt(decrypt)
-    }
-
-    pub fn read_u8(&mut self) -> anyhow::Result<u8> {
-        let mut buf = [0; 1];
-        self.tcp_stream.read_exact(&mut buf)?;
-
-        self.decrypt(&mut buf);
-
-        Ok(buf[0])
-    }
-
-    pub fn read_varint(&mut self) -> anyhow::Result<i32> {
-        let mut buf = Vec::new();
-        while let Ok(byte) = self.read_u8() {
-            buf.push(byte);
-            if let Ok(value) = VarInt::parse(&mut buf.as_slice()) {
-                return Ok(value);
-            }
+        let encryption_state = self.shared_state.get_encryptionlayer();
+        if encryption_state.0.read().is_none() {
+            return;
         }
 
-        Err(anyhow::anyhow!("Weird error"))
+        info!("FROM {:?}", decrypt);
+        _ = encryption_state.decrypt(decrypt);
+        info!("TO: {:?}", decrypt);
     }
 
-    pub fn try_parse_packet(&mut self) -> anyhow::Result<RawPacket> {
-        let Some(length) = self.packet.length_i32() else {
-            return Err(anyhow!("No length"));
-        };
+    pub async fn read_buffer(&mut self) -> anyhow::Result<()> {
+        let mut buffer = BytesMut::zeroed(4096);
 
-        let data = self.packet.clone().freeze();
+        let read = self.tcp_stream.read(&mut buffer).await?;
 
-        let packet = RawPacket::read_length_given(&data, length)?;
+        if read == 0 {
+            return Err(anyhow!("End of Stream"));
+        }
 
-        self.packet = BufPacket::new();
+        self.decrypt(&mut buffer[..read]);
 
-        println!("NEW PACKET: {:?}", packet);
+        self.buffer.write().put_slice(&buffer[..read]);
 
-        Ok(packet)
+        Ok(())
     }
 
-    pub fn run(mut self) -> anyhow::Result<()> {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
-            if !self.packet.has_length() {
-                if let Ok(lenght) = self.read_varint() {
-                    if lenght <= 1 {
-                        continue;
-                    }
-
-                    self.packet.set_length(lenght);
-                }
+            if !self.is_encrypted {
+                let mut buf = self.buffer.write();
+                self.decrypt(&mut buf);
+                self.is_encrypted = true;
             }
 
-            if let (Some(length), Ok(bytes)) = (self.packet.length(), self.read_u8()) {
-                let mut packetbytes = BytesMut::new();
-                packetbytes.put_slice(&VarInt::encode(length as i32).unwrap());
-                packetbytes.put_slice(&self.packet.data);
-
-                if self.packet.data_length() != length {
-                    self.packet.data.put_u8(bytes);
-                }
-
-                if self.packet.data_length() == length {
-                    let packet = self.try_parse_packet()?;
-
-                    self.new_packet.send(packet)?;
-                }
-
-                continue;
-            }
-
-            return Err(anyhow!(""));
+            self.read_buffer().await?;
         }
     }
 }

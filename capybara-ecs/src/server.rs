@@ -7,8 +7,8 @@ use std::net::TcpListener;
 use capybara_packet::helper::{PacketEnum, PacketState};
 use capybara_packet::Packet;
 
-use crate::connection::{parsing::ParseTask, CompressionState, EncryptionState};
-use crate::events::{Handshake, PacketEventPlugin, PingRequest};
+use crate::connection::{parsing::NetworkTask, CompressionState, EncryptionState};
+use crate::events::PacketEventPlugin;
 use crate::player::{player_status_marker, Player, PlayerStatus};
 
 #[derive(Resource)]
@@ -30,12 +30,8 @@ impl Plugin for ServerPlugin {
     }
 }
 
-pub fn clear_dead_socket(mut commands: Commands, tasks: Query<(Entity, &ParseTask)>) {
-    for entity in tasks
-        .iter()
-        .filter(|(_, f)| f.is_finished())
-        .map(|(e, _)| e)
-    {
+pub fn clear_dead_socket(mut commands: Commands, tasks: Query<(Entity, &NetworkTask)>) {
+    for (entity, _) in tasks.iter().filter(|(_, f)| f.is_finished()) {
         commands.entity(entity).despawn_recursive();
     }
 }
@@ -44,8 +40,9 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
     if let Ok((tcpstream, _)) = socket.0.accept() {
         let encryption_state = EncryptionState::default();
         let compression_state = CompressionState {};
-        let Ok(task) = ParseTask::new(
-            &tcpstream,
+
+        let Ok(task) = NetworkTask::new(
+            tcpstream,
             encryption_state.clone(),
             compression_state.clone(),
         ) else {
@@ -67,7 +64,7 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
 }
 
 pub fn recv_packet(
-    mut tasks: Query<(Entity, &ParseTask, &mut PlayerStatus)>,
+    mut tasks: Query<(Entity, &NetworkTask, &mut PlayerStatus)>,
     mut commands: Commands,
 ) {
     for (entity, i, mut state) in &mut tasks {
@@ -89,26 +86,26 @@ pub fn recv_packet(
                         state.set_status(PacketState::Login);
                     }
 
-                    commands.entity(entity).insert(Handshake(packet.clone()));
+                    commands.entity(entity).insert(packet.clone());
                 }
                 PacketEnum::PingRequest(pingrequest) => {
-                    commands
-                        .entity(entity)
-                        .insert(PingRequest(pingrequest.clone()));
+                    commands.entity(entity).insert(pingrequest.clone());
                 }
                 PacketEnum::Login(login) => {
-                    commands
-                        .entity(entity)
-                        .insert(crate::events::Login(login.clone()));
+                    commands.entity(entity).insert(login.clone());
                 }
                 PacketEnum::EncryptionResponse(encryption) => {
-                    commands
-                        .entity(entity)
-                        .insert(crate::events::EncryptionResponse(encryption.clone()));
+                    commands.entity(entity).insert(encryption.clone());
                 }
                 PacketEnum::UnknowPacket(packet) => info!("{packet}"),
                 PacketEnum::None => {
                     info!("{packet:?}");
+                }
+                PacketEnum::StatusRequest(status) => {
+                    commands.entity(entity).insert(status.clone());
+                }
+                PacketEnum::LoginAcknowledged(loginack) => {
+                    commands.entity(entity).insert(loginack.clone());
                 }
             }
         }

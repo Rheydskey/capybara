@@ -1,7 +1,10 @@
 use bytes::Bytes;
 use capybara_packet_serde::from_bytes;
 
-use crate::{EncryptionResponse, Handshake, Login, PacketError, PingRequest};
+use crate::{
+    EncryptionResponse, Handshake, Login, LoginAcknowledged, PacketError, PingRequest,
+    StatusRequest,
+};
 
 /// Return parsed packet
 ///
@@ -18,11 +21,15 @@ pub fn parse_packet(
                 return Ok(PacketEnum::HandShake(from_bytes::<Handshake>(bytes)?));
             }
 
+            if matches!(state, PacketState::Status) {
+                return Ok(PacketEnum::StatusRequest(from_bytes::<StatusRequest>(
+                    bytes,
+                )?));
+            }
+
             if matches!(state, PacketState::Login) {
                 return Ok(PacketEnum::Login(from_bytes::<Login>(bytes)?));
             }
-
-            Err(PacketError::CannotParse(-1).into())
         }
 
         0x1 => {
@@ -32,13 +39,23 @@ pub fn parse_packet(
                 ));
             }
 
-            Ok(PacketEnum::EncryptionResponse(from_bytes::<
-                EncryptionResponse,
-            >(bytes)?))
+            if matches!(state, PacketState::Login) {
+                return Ok(PacketEnum::EncryptionResponse(from_bytes::<
+                    EncryptionResponse,
+                >(bytes)?));
+            }
         }
-
-        _ => Err(PacketError::CannotParse(packetid).into()),
+        0x3 => {
+            if matches!(state, PacketState::Login) {
+                return Ok(PacketEnum::LoginAcknowledged(
+                    capybara_packet_serde::from_bytes::<LoginAcknowledged>(bytes)?,
+                ));
+            }
+        }
+        _ => return Err(PacketError::CannotParse(packetid).into()),
     }
+
+    Err(PacketError::CannotParse(-1).into())
 }
 
 #[derive(Debug, Default, Clone)]
@@ -46,18 +63,20 @@ pub enum PacketEnum {
     #[default]
     None,
     HandShake(Handshake),
+    StatusRequest(StatusRequest),
     Login(Login),
     EncryptionResponse(EncryptionResponse),
     PingRequest(PingRequest),
+    LoginAcknowledged(LoginAcknowledged),
     UnknowPacket(String),
 }
 
 #[derive(Debug, Clone)]
 pub enum PacketState {
     None,
-    Status,
     Handshake,
-    State,
+    Status,
     Login,
+    Configuration,
     Play,
 }

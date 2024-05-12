@@ -1,3 +1,4 @@
+use bevy_ecs::component::Component;
 pub use capybara_packet_parser;
 pub use capybara_packet_serde;
 
@@ -200,7 +201,7 @@ pub trait PacketTrait {
         Self: Sized;
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Component)]
 pub struct Handshake {
     pub protocol: VarInt,
     pub address: String,
@@ -210,7 +211,7 @@ pub struct Handshake {
 
 impl_id!(Handshake, 0x00);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Component)]
 pub struct Login {
     pub name: String,
     pub uuid: Uuid,
@@ -244,7 +245,7 @@ impl EncryptionRequest {
 
 impl_id!(EncryptionRequest, 0x01);
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Component)]
 pub struct EncryptionResponse {
     sharedsecret: Vec<u8>,
     verify_token: Vec<u8>,
@@ -364,7 +365,7 @@ pub struct ServerStatus {
 }
 
 impl ServerStatus {
-    pub fn new(
+    pub const fn new(
         description: Description,
         enforces_secure_chat: bool,
         players: Players,
@@ -428,7 +429,7 @@ impl Default for StatusPacket {
 
 impl_id!(StatusPacket, 0x00);
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Component)]
 pub struct PingRequest {
     pub value: i64,
 }
@@ -472,3 +473,13 @@ macro_rules! impl_id {
         }
     };
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
+pub struct StatusRequest;
+
+impl_id!(StatusRequest, 0x0);
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
+pub struct LoginAcknowledged;
+
+impl_id!(LoginAcknowledged, 0x3);
