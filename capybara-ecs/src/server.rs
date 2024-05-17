@@ -1,6 +1,7 @@
-use bevy_app::{App, Plugin, PreUpdate};
+use bevy_app::{App, FixedPreUpdate, Plugin};
 use bevy_ecs::prelude::{Commands, Entity, IntoSystemConfigs, Query, Res, Resource};
 use bevy_hierarchy::DespawnRecursiveExt;
+use bevy_time::{Fixed, Time};
 
 use std::net::TcpListener;
 
@@ -22,11 +23,13 @@ impl Plugin for ServerPlugin {
         socket.set_nonblocking(true).unwrap();
 
         app.insert_resource(Listener(socket))
+            .insert_resource(Time::<Fixed>::from_hz(500.))
             .add_systems(
-                PreUpdate,
+                FixedPreUpdate,
                 (clear_dead_socket, recv_connection, recv_packet).chain(),
             )
-            .add_plugins(PacketEventPlugin);
+            .add_plugins(PacketEventPlugin)
+            .add_plugins(bevy_time::TimePlugin);
     }
 }
 

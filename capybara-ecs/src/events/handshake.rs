@@ -3,9 +3,7 @@ use bevy_ecs::{
     query::With,
     system::{Commands, Query},
 };
-use capybara_packet::{
-    Description, Handshake, PingRequest, Player, ServerStatus, StatusPacket, StatusRequest,
-};
+use capybara_packet::{Description, Handshake, Player, ServerStatus, StatusPacket, StatusRequest};
 
 use crate::{connection::parsing::NetworkTask, player::player_status_marker};
 
@@ -39,7 +37,7 @@ pub fn status_handler(
             error!("{error}");
         }
 
-        command.entity(entity).remove::<PingRequest>();
+        command.entity(entity).remove::<StatusRequest>();
     }
 }
 
@@ -55,7 +53,6 @@ pub fn handshake_handler(
             entitycommand.remove::<player_status_marker::Handshaking>();
             entitycommand.insert(player_status_marker::Status);
             entitycommand.remove::<Handshake>();
-            entitycommand.log_components();
             info!("{entity:?} is now in status state");
             continue;
         }
