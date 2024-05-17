@@ -11,7 +11,10 @@ use capybara_packet_parser::{PacketUuid, Parsable, VarInt};
 use rand::{thread_rng, Rng};
 use rsa::{pkcs8::EncodePublicKey, Error, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
 use serde::{de::Visitor, ser::SerializeStruct, Deserialize, Serialize, Serializer};
-use std::{fmt::Debug, marker::PhantomData, str::FromStr};
+use std::{
+    fmt::{Debug, Display},
+    str::FromStr,
+};
 use thiserror::Error;
 use types::{Chat, RawPacket, Text};
 
@@ -106,14 +109,15 @@ impl Serialize for ArrayBytes {
 pub struct Identifier(capybara_packet_parser::Identifier);
 
 impl Identifier {
-    pub fn new(namespace: String, value: String) -> Self {
+    #[must_use]
+    pub const fn new(namespace: String, value: String) -> Self {
         Self(capybara_packet_parser::Identifier { namespace, value })
     }
 }
 
-impl ToString for Identifier {
-    fn to_string(&self) -> String {
-        self.0.to_string()
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -173,6 +177,12 @@ impl Packet {
         self.packetdata = packet;
 
         Ok(())
+    }
+}
+
+impl Default for Packet {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -365,6 +375,7 @@ pub struct ServerStatus {
 }
 
 impl ServerStatus {
+    #[must_use]
     pub const fn new(
         description: Description,
         enforces_secure_chat: bool,
@@ -440,17 +451,18 @@ impl_id!(PingRequest, 0x01);
 pub struct PlayLogin {
     pub entity_id: u32,
     pub is_hardcore: bool,
-    pub gamemode: u8,
     pub dimension_names: Vec<Identifier>,
-    pub registry_code: PhantomData<()>,
-    pub dimension_type: String,
-    pub dimension_name: String,
-    pub hashed_seed: u64,
     pub max_player: VarInt,
     pub view_distance: VarInt,
     pub simulation_distance: VarInt,
     pub reduced_debug_info: bool,
     pub enable_respawn_screen: bool,
+    pub limited_crafting: bool,
+    pub dimension_type: String,
+    pub dimension_name: String,
+    pub hashed_seed: u64,
+    pub gamemode: u8,
+    pub previous_gamemode: i8,
     pub is_debug: bool,
     pub is_flat: bool,
     pub death_location: Option<DeathLocation>,

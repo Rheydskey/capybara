@@ -14,6 +14,7 @@ use bevy_app::{App, ScheduleRunnerPlugin};
 use bevy_core::TaskPoolPlugin;
 
 use config::GlobalServerConfig;
+// use logger::TickTime;
 use server::ServerPlugin;
 use std::time::Duration;
 
@@ -25,6 +26,7 @@ pub fn init() -> anyhow::Result<()> {
     App::new()
         .add_plugins(TaskPoolPlugin::default())
         .add_plugins(Log)
+        // .add_plugins(TickTime)
         .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
             1. / 200.,
         )))

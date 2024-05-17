@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod test;
 
-use std::marker::PhantomData;
+use std::{
+    fmt::{Display, Write},
+    marker::PhantomData,
+};
 use winnow::{
     binary::{be_u64, be_u8},
     error::AddContext,
@@ -27,7 +30,7 @@ pub trait Parsable {
         <I as Stream>::Slice: AsBytes;
 }
 
-pub struct PacketUuid(uuid::Uuid);
+pub struct PacketUuid(pub uuid::Uuid);
 
 impl Parsable for PacketUuid {
     type Target = Uuid;
@@ -211,7 +214,7 @@ impl Parsable for PacketString {
     }
 }
 
-pub struct PacketBool(bool);
+pub struct PacketBool(pub bool);
 
 impl Parsable for PacketBool {
     type Target = bool;
@@ -226,7 +229,7 @@ impl Parsable for PacketBool {
     }
 }
 
-pub struct PacketBytes(Vec<u8>);
+pub struct PacketBytes(pub Vec<u8>);
 
 impl Parsable for PacketBytes {
     type Target = Vec<u8>;
@@ -291,7 +294,7 @@ impl<T: Parsable> PacketBoolOption<T> {
 }
 
 #[derive(Debug)]
-struct Angle(u8);
+struct Angle(pub u8);
 
 impl Angle {
     pub fn get_degree(&self) -> f64 {
@@ -311,7 +314,7 @@ impl Parsable for Angle {
     }
 }
 
-struct Position(u64);
+struct Position(pub u64);
 
 impl Position {
     const fn x() -> i32 {
@@ -372,9 +375,11 @@ impl Parsable for Identifier {
     }
 }
 
-impl ToString for Identifier {
-    fn to_string(&self) -> String {
-        format!("{}:{}", self.namespace, self.value)
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.namespace)?;
+        f.write_char(':')?;
+        f.write_str(&self.value)
     }
 }
 

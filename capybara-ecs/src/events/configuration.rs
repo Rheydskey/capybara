@@ -3,7 +3,8 @@ use bevy_ecs::{
     system::{Commands, Query},
 };
 use capybara_packet::{
-    ClientInformation, ClientboundPluginMessage, FinishConfigAcknowledged, FinishConfiguration,
+    capybara_packet_parser::VarInt, ClientInformation, ClientboundPluginMessage,
+    FinishConfigAcknowledged, FinishConfiguration, PlayLogin,
 };
 
 use crate::{connection::parsing::NetworkTask, player::player_status_marker};
@@ -33,12 +34,38 @@ pub fn config_plugin(
     }
 }
 
-pub fn finish_config(mut command: Commands, finish: Query<(Entity, &FinishConfigAcknowledged)>) {
-    for (entity, _) in finish.iter() {
+pub fn finish_config(
+    mut command: Commands,
+    finish: Query<(Entity, &FinishConfigAcknowledged, &NetworkTask)>,
+) {
+    for (entity, _, nettask) in finish.iter() {
         let mut entity_command = command.entity(entity);
         info!("{:?} is in play mode", entity);
 
-        entity_command.insert(player_status_marker::Status);
+        entity_command.insert(player_status_marker::Play);
+
+        nettask
+            .send_packet_serialize(&PlayLogin {
+                entity_id: entity.index(),
+                is_hardcore: false,
+                dimension_names: Vec::new(),
+                max_player: VarInt(20),
+                view_distance: VarInt(10),
+                simulation_distance: VarInt(10),
+                reduced_debug_info: false,
+                enable_respawn_screen: false,
+                limited_crafting: false,
+                dimension_type: String::new(),
+                dimension_name: String::new(),
+                hashed_seed: 0,
+                gamemode: 1,
+                previous_gamemode: -1,
+                is_debug: false,
+                is_flat: true,
+                death_location: None,
+                portal_cooldown: VarInt(10),
+            })
+            .unwrap();
 
         entity_command.remove::<player_status_marker::Configuration>();
         entity_command.remove::<FinishConfigAcknowledged>();
