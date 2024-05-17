@@ -32,3 +32,14 @@ fn region2() {
     let mut slice_data = bytes.as_slice();
     Region::parse(&mut slice_data).unwrap();
 }
+
+#[test]
+fn bigtest_wikivg() {
+    let mut test_file = std::fs::File::open("./tests/bigtest.nbt").unwrap();
+
+    let mut bytes = Vec::new();
+    test_file.read_to_end(&mut bytes).unwrap();
+
+    let mut slice_data = bytes.as_slice();
+    RootCompound::parse(&mut slice_data).unwrap();
+}
