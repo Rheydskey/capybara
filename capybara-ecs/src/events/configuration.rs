@@ -7,7 +7,10 @@ use capybara_packet::{
     FinishConfigAcknowledged, FinishConfiguration, PlayLogin,
 };
 
-use crate::{connection::parsing::NetworkTask, player::player_status_marker};
+use crate::{
+    connection::parsing::NetworkTask,
+    player::{player_status_marker, PluginChannel},
+};
 
 pub fn client_information(mut command: Commands, loginacks: Query<(Entity, &ClientInformation)>) {
     for (entity, client_information) in loginacks.iter() {
@@ -20,10 +23,19 @@ pub fn client_information(mut command: Commands, loginacks: Query<(Entity, &Clie
 
 pub fn config_plugin(
     mut command: Commands,
-    loginacks: Query<(Entity, &ClientboundPluginMessage, &NetworkTask)>,
+    mut loginacks: Query<(
+        Entity,
+        &ClientboundPluginMessage,
+        &NetworkTask,
+        &mut PluginChannel,
+    )>,
 ) {
-    for (entity, client_information, nettask) in loginacks.iter() {
+    for (entity, client_information, nettask, mut plugin) in loginacks.iter_mut() {
         let mut entity_command = command.entity(entity);
+        let string = String::from_utf8(client_information.data.clone()).unwrap();
+
+        plugin.0.push(string);
+
         info!("{:?}", client_information);
         if let Err(e) = nettask.send_packet_serialize(&FinishConfiguration) {
             error!("{e}");

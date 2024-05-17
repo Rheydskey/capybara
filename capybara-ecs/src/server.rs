@@ -58,6 +58,7 @@ pub fn recv_connection(socket: Res<Listener>, mut commands: Commands) {
             player_status: PlayerStatus(PacketState::Handshake),
             encryption_state,
             compression_state,
+            plugin_channel: Default::default(),
         });
 
         entity.insert(player_status_marker::Handshaking);

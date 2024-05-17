@@ -15,6 +15,7 @@ pub struct Player {
     pub player_status: PlayerStatus,
     pub encryption_state: EncryptionState,
     pub compression_state: CompressionState,
+    pub plugin_channel: PluginChannel,
 }
 
 #[derive(Debug, Component)]
@@ -57,3 +58,6 @@ pub mod player_status_marker {
     #[derive(Debug, Component)]
     pub struct Play;
 }
+
+#[derive(Debug, Component, Clone, Default)]
+pub struct PluginChannel(pub Vec<String>);
