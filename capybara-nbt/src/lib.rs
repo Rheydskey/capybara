@@ -1,7 +1,9 @@
 pub mod mcregion;
 
 use winnow::{
-    binary::{be_f32, be_f64, be_i16, be_i32, be_i64, be_i8, be_u16, be_u8},
+    binary::{
+        be_f32, be_f64, be_i16, be_i32, be_i64, be_i8, be_u16, be_u8, length_repeat, length_take,
+    },
     combinator::trace,
     error::ContextError,
     stream::{AsBytes, Stream, StreamIsPartial},
@@ -52,9 +54,11 @@ impl Tag {
                 return Ok((id, String::new()));
             }
 
-            let lenght = be_u16(bytes)?;
-            let name = take(lenght).parse_next(bytes)?;
-            let name = String::from_utf8(name.as_bytes().to_vec()).unwrap();
+            let name = length_take(be_u16)
+                .try_map(move |taken_bytes: <I as Stream>::Slice| {
+                    String::from_utf8(taken_bytes.as_bytes().to_vec())
+                })
+                .parse_next(bytes)?;
 
             Ok((id, name))
         })
@@ -79,8 +83,7 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse short", |bytes: &mut I| {
-            let value = be_i16.parse_next(bytes)?;
-            Ok(TagInner::Short(value))
+            be_i16.map(TagInner::Short).parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -91,8 +94,7 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse int", |bytes: &mut I| {
-            let value = be_i32.parse_next(bytes)?;
-            Ok(TagInner::Int(value))
+            be_i32.map(TagInner::Int).parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -103,8 +105,7 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse long", |bytes: &mut I| {
-            let value = be_i64.parse_next(bytes)?;
-            Ok(TagInner::Long(value))
+            be_i64.map(TagInner::Long).parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -115,8 +116,7 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse float", |bytes: &mut I| {
-            let value = be_f32.parse_next(bytes)?;
-            Ok(TagInner::Float(value))
+            be_f32.map(TagInner::Float).parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -127,8 +127,7 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse double", |bytes: &mut I| {
-            let value = be_f64.parse_next(bytes)?;
-            Ok(TagInner::Double(value))
+            be_f64.map(TagInner::Double).parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -139,9 +138,9 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse byte array", |bytes: &mut I| {
-            let value = be_i32.parse_next(bytes)?;
-            let bytes = take(value.unsigned_abs()).parse_next(bytes)?;
-            Ok(TagInner::Array(bytes.as_bytes().to_vec()))
+            length_take(be_i32.try_map(|f: i32| -> Result<u32, _> { f.try_into() }))
+                .map(|f: <I as Stream>::Slice| TagInner::Array(f.as_bytes().to_vec()))
+                .parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -151,40 +150,17 @@ impl Tag {
         I: StreamIsPartial + Stream<Token = u8>,
         <I as Stream>::Slice: AsBytes,
     {
-        trace("Parse string", |bytes: &mut I| {
+        trace("Parse string", |bytes: &mut I| -> PResult<TagInner> {
             let value = be_u16.parse_next(bytes)?;
-            let bytes = take(value).parse_next(bytes)?;
 
-            Ok(TagInner::String(
-                String::from_utf8(bytes.as_bytes().to_vec()).unwrap(),
-            ))
+            take(value)
+                .try_map(move |taken_bytes: <I as Stream>::Slice| {
+                    String::from_utf8(taken_bytes.as_bytes().to_vec())
+                })
+                .map(TagInner::String)
+                .parse_next(bytes)
         })
         .parse_next(bytes)
-    }
-
-    fn parse_array_of<I, O, P, S>(
-        mut size: S,
-        mut parse: P,
-    ) -> impl FnMut(&mut I) -> PResult<Vec<O>>
-    where
-        S: Parser<I, i32, ContextError>,
-        P: Parser<I, O, ContextError>,
-        I: StreamIsPartial + Stream<Token = u8>,
-        <I as Stream>::Slice: AsBytes,
-    {
-        move |b: &mut I| -> PResult<Vec<O>> {
-            trace("Parse array", |b: &mut I| {
-                let size = size.parse_next(b)?.unsigned_abs() as usize;
-                let mut result = Vec::new();
-                for _ in 0..size {
-                    let o = parse.parse_next(b)?;
-                    result.push(o);
-                }
-
-                Ok(result)
-            })
-            .parse_next(b)
-        }
     }
 
     fn parse_list<I>(bytes: &mut I) -> PResult<TagInner>
@@ -195,8 +171,10 @@ impl Tag {
         trace("Parse list", |bytes: &mut I| {
             let id = be_u8(bytes)?;
             let parser = Self::tag_parse(id);
-            let elements = Self::parse_array_of(be_i32, parser)(bytes)?;
-            Ok(TagInner::List(elements))
+
+            length_repeat(Self::get_length, parser)
+                .map(TagInner::List)
+                .parse_next(bytes)
         })
         .parse_next(bytes)
     }
@@ -235,7 +213,7 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse array of int", |bytes: &mut I| {
-            let elements = Self::parse_array_of(be_i32, be_i32)(bytes)?;
+            let elements = length_repeat(Self::get_length, be_i32).parse_next(bytes)?;
             Ok(TagInner::IntArray(elements))
         })
         .parse_next(bytes)
@@ -247,10 +225,18 @@ impl Tag {
         <I as Stream>::Slice: AsBytes,
     {
         trace("Parse array of long", |bytes: &mut I| {
-            let elements = Self::parse_array_of(be_i32, be_i64)(bytes)?;
+            let elements = length_repeat(Self::get_length, be_i64).parse_next(bytes)?;
             Ok(TagInner::LongArray(elements))
         })
         .parse_next(bytes)
+    }
+
+    pub fn get_length<I>(bytes: &mut I) -> PResult<usize>
+    where
+        I: StreamIsPartial + Stream<Token = u8>,
+        <I as Stream>::Slice: AsBytes,
+    {
+        be_i32.map(|f| f as usize).parse_next(bytes)
     }
 
     #[must_use]
