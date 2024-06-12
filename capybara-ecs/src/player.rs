@@ -53,9 +53,6 @@ pub mod player_status_marker {
     pub struct Login;
 
     #[derive(Debug, Component)]
-    pub struct Configuration;
-
-    #[derive(Debug, Component)]
     pub struct Play;
 }
 

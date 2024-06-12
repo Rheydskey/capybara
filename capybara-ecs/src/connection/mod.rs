@@ -33,10 +33,8 @@ pub struct EncryptionState(Arc<RwLock<Option<EncryptionLayer>>>);
 impl EncryptionState {
     pub fn encrypt(&self, bytes: &mut [u8]) {
         if let Some(encryption) = &mut *self.0.write() {
-            info!("Encrypting....");
-
             let cipher = &mut encryption.encrypt;
-            for chunk in bytes.chunks_mut(Decryptor::block_size()) {
+            for chunk in bytes.chunks_mut(Encryptor::block_size()) {
                 let gen_arr = GenericArray::from_mut_slice(chunk);
                 cipher.encrypt_block_mut(gen_arr);
             }

@@ -43,8 +43,8 @@ pub fn login_ack(mut command: Commands, loginacks: Query<(Entity, &LoginAcknowle
     for (entity, _) in loginacks.iter() {
         let mut entity_command = command.entity(entity);
         entity_command.remove::<player_status_marker::Login>();
-        entity_command.insert(player_status_marker::Configuration);
-        info!("{:?} is now in configuration mode", entity);
+        entity_command.insert(player_status_marker::Play);
+        info!("{:?} is now in play mode", entity);
         entity_command.remove::<LoginAcknowledged>();
     }
 }

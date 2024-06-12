@@ -4,7 +4,7 @@ use bevy_ecs::{
 };
 use capybara_packet::{
     capybara_packet_parser::VarInt, ClientInformation, ClientboundPluginMessage,
-    FinishConfigAcknowledged, FinishConfiguration, PlayLogin,
+    FinishConfigAcknowledged, FinishConfiguration, Identifier, PlayLogin,
 };
 
 use crate::{
@@ -60,7 +60,10 @@ pub fn finish_config(
             .send_packet_serialize(&PlayLogin {
                 entity_id: entity.index(),
                 is_hardcore: false,
-                dimension_names: Vec::new(),
+                dimension_names: vec![Identifier::new(
+                    "minecraft".to_string(),
+                    "overworld".to_string(),
+                )],
                 max_player: VarInt(20),
                 view_distance: VarInt(10),
                 simulation_distance: VarInt(10),
@@ -79,7 +82,6 @@ pub fn finish_config(
             })
             .unwrap();
 
-        entity_command.remove::<player_status_marker::Configuration>();
         entity_command.remove::<FinishConfigAcknowledged>();
     }
 }
