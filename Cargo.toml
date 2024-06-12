@@ -5,6 +5,5 @@ members = [
   "capybara-ecs",
   'capybara-packet',
   'capybara-packetparser',
-  'capybara-nbt', 
   "capybara-packet-serde"
 ]

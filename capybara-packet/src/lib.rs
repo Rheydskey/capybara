@@ -172,7 +172,7 @@ impl Packet {
     ) -> anyhow::Result<()> {
         let packet = parse_packet(rawpacket.packetid, state, &rawpacket.data)?;
 
-        info!("{packet:?}");
+        info!("{rawpacket:?} => {packet:?}");
 
         self.packetdata = packet;
 
