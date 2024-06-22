@@ -3,6 +3,7 @@ mod encryption;
 mod handshake;
 mod login;
 mod ping;
+mod registry;
 
 use bevy_app::{Plugin, Update};
 use bevy_ecs::schedule::IntoSystemConfigs;
@@ -21,7 +22,7 @@ impl Plugin for PacketEventPlugin {
                 encryption::response_encryption,
                 login::login_ack,
                 configuration::client_information,
-                configuration::config_plugin,
+                configuration::registry_data,
                 configuration::finish_config,
             )
                 .chain(),

@@ -76,7 +76,12 @@ pub fn recv_packet(
             let mut packet = Packet::new();
 
             if let Err(error) = packet.parse_from_rawpacket(&state.get_status(), &rawpacket) {
-                error!("Cannot parse packet: {}", error);
+                error!(
+                    "Cannot parse packet: {} in {:?} stage => {:?}",
+                    error,
+                    state.get_status(),
+                    rawpacket
+                );
                 continue;
             }
 

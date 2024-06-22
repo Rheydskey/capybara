@@ -44,15 +44,17 @@ pub fn parse_packet(
             if matches!(state, PacketState::Login) {
                 return Ok(PacketEnum::EncryptionResponse(from_bytes(bytes)?));
             }
-
+        }
+        0x2 => {
             if matches!(state, PacketState::Configuration) {
                 return Ok(PacketEnum::ClientboundPluginMessage(from_bytes(bytes)?));
             }
         }
-        0x2 if matches!(state, PacketState::Configuration) => {
-            return Ok(PacketEnum::FinishConfigAcknowledged(from_bytes(bytes)?))
-        }
         0x3 => {
+            if matches!(state, PacketState::Configuration) {
+                return Ok(PacketEnum::FinishConfigAcknowledged(from_bytes(bytes)?));
+            }
+
             if matches!(state, PacketState::Login) {
                 return Ok(PacketEnum::LoginAcknowledged(
                     capybara_packet_serde::from_bytes(bytes)?,

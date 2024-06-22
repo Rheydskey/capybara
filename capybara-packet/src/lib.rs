@@ -234,6 +234,7 @@ pub struct EncryptionRequest {
     pub server_id: String,
     pub publickey: ArrayBytes,
     pub verify_token: ArrayBytes,
+    should_auth: bool,
 }
 
 impl EncryptionRequest {
@@ -249,6 +250,7 @@ impl EncryptionRequest {
             server_id: String::new(),
             publickey: ArrayBytes(key),
             verify_token: ArrayBytes(token.to_vec()),
+            should_auth: false,
         })
     }
 }
@@ -295,6 +297,7 @@ pub struct LoginSuccessPacket {
     uuid: Uuid,
     username: String,
     length_properties: VarInt,
+    strict_error_handling: bool,
 }
 
 impl LoginSuccessPacket {
@@ -305,6 +308,7 @@ impl LoginSuccessPacket {
             uuid: Uuid(uuid),
             username,
             length_properties: VarInt(0),
+            strict_error_handling: true,
         }
     }
 
@@ -320,11 +324,12 @@ impl Serialize for LoginSuccessPacket {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("", 3)?;
+        let mut state = serializer.serialize_struct("", 4)?;
 
         state.serialize_field("uuid", &self.uuid.0.to_bytes_le())?;
         state.serialize_field("username", &self.username)?;
         state.serialize_field("lenght_properties", &self.length_properties)?;
+        state.serialize_field("strict_error_handling", &self.strict_error_handling)?;
 
         state.end()
     }
@@ -469,7 +474,7 @@ pub struct PlayLogin {
     pub portal_cooldown: VarInt,
 }
 
-impl_id!(PlayLogin, 0x28);
+impl_id!(PlayLogin, 0x2B);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct DeathLocation {
@@ -521,9 +526,9 @@ impl_id!(ClientInformation, 0x0);
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
 pub struct FinishConfiguration;
 
-impl_id!(FinishConfiguration, 0x2);
+impl_id!(FinishConfiguration, 0x3);
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Component)]
 pub struct FinishConfigAcknowledged;
 
-impl_id!(FinishConfigAcknowledged, 0x2);
+impl_id!(FinishConfigAcknowledged, 0x3);

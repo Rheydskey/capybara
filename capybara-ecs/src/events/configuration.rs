@@ -1,3 +1,5 @@
+use std::{thread::sleep, time::Duration};
+
 use bevy_ecs::{
     entity::Entity,
     system::{Commands, Query},
@@ -21,7 +23,7 @@ pub fn client_information(mut command: Commands, loginacks: Query<(Entity, &Clie
     }
 }
 
-pub fn config_plugin(
+pub fn registry_data(
     mut command: Commands,
     mut loginacks: Query<(
         Entity,
@@ -37,6 +39,7 @@ pub fn config_plugin(
         plugin.0.push(string);
 
         info!("{:?}", client_information);
+
         if let Err(e) = nettask.send_packet_serialize(&FinishConfiguration) {
             error!("{e}");
             continue;
