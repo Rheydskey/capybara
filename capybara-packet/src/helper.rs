@@ -6,6 +6,27 @@ use crate::{
     Handshake, Login, LoginAcknowledged, PacketError, PingRequest, StatusRequest,
 };
 
+macro_rules! parse {
+    ($state:ident, $packet:ident,$bytes:ident, $($id:expr =>  {
+      $($($t:path),* => $value:path),* $(,)?
+    }),* $(,)?) => {
+        match $packet {
+            $(
+                $id => {
+                    $(
+                        if $(matches!($state, $t))||* {
+                            return Ok($value(from_bytes($bytes)?));
+                        }
+                    )*
+                }
+            )*
+
+
+            _ => return Err(PacketError::CannotParse($packet).into()),
+        }
+    };
+}
+
 /// Return parsed packet
 ///
 /// # Errors
@@ -15,54 +36,25 @@ pub fn parse_packet(
     state: &PacketState,
     bytes: &Bytes,
 ) -> anyhow::Result<PacketEnum> {
-    match packetid {
+    parse!(state, packetid, bytes,
         0x0 => {
-            if matches!(state, PacketState::Handshake) || matches!(state, PacketState::None) {
-                return Ok(PacketEnum::HandShake(from_bytes(bytes)?));
-            }
-
-            if matches!(state, PacketState::Status) {
-                return Ok(PacketEnum::StatusRequest(from_bytes(bytes)?));
-            }
-
-            if matches!(state, PacketState::Login) {
-                return Ok(PacketEnum::Login(from_bytes(bytes)?));
-            }
-
-            if matches!(state, PacketState::Configuration) {
-                return Ok(PacketEnum::ClientInformation(from_bytes(bytes)?));
-            }
-        }
-
+            PacketState::Handshake, PacketState::None => PacketEnum::HandShake,
+            PacketState::Status => PacketEnum::StatusRequest,
+            PacketState::Login => PacketEnum::Login,
+            PacketState::Configuration => PacketEnum::ClientInformation
+        },
         0x1 => {
-            if matches!(state, PacketState::Status) {
-                return Ok(PacketEnum::PingRequest(capybara_packet_serde::from_bytes(
-                    bytes,
-                )?));
-            }
-
-            if matches!(state, PacketState::Login) {
-                return Ok(PacketEnum::EncryptionResponse(from_bytes(bytes)?));
-            }
-        }
+            PacketState::Status => PacketEnum::PingRequest,
+            PacketState::Login => PacketEnum::EncryptionResponse
+        },
         0x2 => {
-            if matches!(state, PacketState::Configuration) {
-                return Ok(PacketEnum::ClientboundPluginMessage(from_bytes(bytes)?));
-            }
-        }
+            PacketState::Configuration => PacketEnum::ClientboundPluginMessage,
+        },
         0x3 => {
-            if matches!(state, PacketState::Configuration) {
-                return Ok(PacketEnum::FinishConfigAcknowledged(from_bytes(bytes)?));
-            }
-
-            if matches!(state, PacketState::Login) {
-                return Ok(PacketEnum::LoginAcknowledged(
-                    capybara_packet_serde::from_bytes(bytes)?,
-                ));
-            }
+            PacketState::Configuration => PacketEnum::FinishConfigAcknowledged,
+            PacketState::Login => PacketEnum::LoginAcknowledged
         }
-        _ => return Err(PacketError::CannotParse(packetid).into()),
-    }
+    );
 
     Err(PacketError::CannotParse(-1).into())
 }
